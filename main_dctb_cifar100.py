@@ -262,7 +262,7 @@ def main_worker(gpu, ngpus_per_node, args):
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    warmup_scheduler = WarmUpLR(optimizer, len(train_loader))
+    # warmup_scheduler = WarmUpLR(optimizer, len(train_loader))
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
