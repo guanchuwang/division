@@ -21,7 +21,7 @@ import torchvision.datasets as datasets
 # import cnn_models as models
 import cifar_models.dctb as models
 from module import MDCT_Module
-from utils.mdct_utils import WarmUpLR
+# from utils.mdct_utils import WarmUpLR
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
