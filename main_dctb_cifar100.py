@@ -2,6 +2,7 @@ import argparse
 import os
 import random
 import shutil
+import pdb
 import time
 import warnings
 import builtins
@@ -70,7 +71,9 @@ parser.add_argument('--world-size', default=-1, type=int,
                     help='number of nodes for distributed training')
 parser.add_argument('--rank', default=-1, type=int,
                     help='node rank for distributed training')
-parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
+# parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
+#                     help='url used to set up distributed training')
+parser.add_argument('--dist-url', default='tcp://localhost:10002', type=str,
                     help='url used to set up distributed training')
 parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
@@ -130,7 +133,6 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
-
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -178,7 +180,6 @@ def main_worker(gpu, ngpus_per_node, args):
     # MDCT_Module.update_conv_window_size(model, window_size=args.conv_window_size, hfc_bit_num=args.hfc_bit_num)
     # MDCT_Module.update_bn_window_size(model, window_size=args.bn_window_size, hfc_bit_num=args.hfc_bit_num)
     # model.prep(input_shape=(64, 3, 32, 32))
-
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     elif args.distributed:
@@ -347,10 +348,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output
         torch.cuda.synchronize()
         batch_update_start_time = time.time()
-        output = model(images) # , window_size=args.window_size)
+        output = model(images)
+        torch.cuda.synchronize()
+        batch_update_end_time = time.time()
+        print(f'foward time: {batch_update_end_time - batch_start_time}')
+        print(f'allocated mem: {torch.cuda.memory_allocated() / 2 ** 20}')
         loss = criterion(output, target)
-
-        # hegsns
 
         # amp
         # with amp.autocast():

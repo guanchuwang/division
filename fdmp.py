@@ -80,8 +80,8 @@ class FDMP(Function):
             return FDMP.fdmp_simulation(x, window_size, device)
 
         x_lfc_dct, x_lfc, x_hfc = MDCT_op.freq_divide(x, window_size, device)
+        print(f'In fdmp, x_lfc_dct.shape: {x_lfc_dct.shape}')
         # q_bits = int(quant_bit)
-
         # t0 = time.time()
         x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, device)
         q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
