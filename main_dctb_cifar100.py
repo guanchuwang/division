@@ -5,33 +5,41 @@ import shutil
 import time
 import warnings
 import builtins
-
 import torch
+
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.optim
+
+
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+
+import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
 # import torchvision.models as models
-# import cnn_models as models
 import cifar_models.dctb as models
 from module import MDCT_Module
 # from utils.mdct_utils import WarmUpLR
+
+from timer import global_timer
+from conf import config
+# import actnn
+
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
 
-parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+parser = argparse.ArgumentParser(description='MDCT cifar100')
 # parser.add_argument('data', metavar='DIR', help='path to dataset')
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet101',
+parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names, help='model architecture: ' + ' | '.join(model_names) +
-                        ' (default: resnet101)')
+                        ' (default: resnet56)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
@@ -79,10 +87,12 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
 parser.add_argument("--conv_window_size", type=float, default=1, help="")
 parser.add_argument("--bn_window_size", type=float, default=1, help="")
-parser.add_argument("--hfc_bit_num", type=float, default=2, help="")
+parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--opt", type=str, default="SGD", help="")
 parser.add_argument("--save_period", type=int, default=10, help="")
-
+parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
+parser.add_argument("--group_size", type=int, default=256, help="")
+parser.add_argument("--round_window", type=bool, default=True, help="")
 
 best_acc1 = 0
 
@@ -90,7 +100,15 @@ def main():
     args = parser.parse_args()
     gpu_devices = ','.join([str(id) for id in args.gpu_devices])
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
+    config.simulate = args.simulate
+    config.group_size = args.group_size
+    config.conv_window_size = args.conv_window_size
+    config.bn_window_size = args.bn_window_size
+    config.hfc_bit_num = args.hfc_bit_num
+    config.round_window = args.round_window
+    # actnn.set_optimization_level("L3")
     print(args)
+
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -112,6 +130,7 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
+
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -156,8 +175,9 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
     model = MDCT_Module(model)
-    MDCT_Module.update_conv_window_size(model, window_size=args.conv_window_size, hfc_bit_num=args.hfc_bit_num)
-    MDCT_Module.update_bn_window_size(model, window_size=args.bn_window_size, hfc_bit_num=args.hfc_bit_num)
+    # MDCT_Module.update_conv_window_size(model, window_size=args.conv_window_size, hfc_bit_num=args.hfc_bit_num)
+    # MDCT_Module.update_bn_window_size(model, window_size=args.bn_window_size, hfc_bit_num=args.hfc_bit_num)
+    # model.prep(input_shape=(64, 3, 32, 32))
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -175,7 +195,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         else:
-            model.cuda()
+            model.cuda(args.gpu)
             # DistributedDataParallel will divide and allocate batch_size to all
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
@@ -304,9 +324,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
+    throughput = AverageMeter('Throughput', ':6.2f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
+        [batch_time, throughput, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
@@ -315,6 +336,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
+        batch_start_time = time.time()
         data_time.update(time.time() - end)
 
         if args.gpu is not None:
@@ -323,8 +345,24 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             target = target.cuda(args.gpu, non_blocking=True)
 
         # compute output
+        torch.cuda.synchronize()
+        batch_update_start_time = time.time()
         output = model(images) # , window_size=args.window_size)
         loss = criterion(output, target)
+
+        # hegsns
+
+        # amp
+        # with amp.autocast():
+        #     output = model(images)
+        #     loss = criterion(output, target)
+
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        torch.cuda.synchronize()
+        batch_update_end_time = time.time()
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
@@ -332,13 +370,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
         # measure elapsed time
         batch_time.update(time.time() - end)
+        throughput.update(args.batch_size/(batch_update_end_time - batch_update_start_time))
         end = time.time()
 
         if i % args.print_freq == 0:
@@ -369,6 +403,7 @@ def validate(val_loader, model, criterion, args):
             # compute output
             output = model(images) # , window_size=args.window_size)
             loss = criterion(output, target)
+            # hegsns
 
             # measure accuracy and record loss
             acc1, acc5 = accuracy(output, target, topk=(1, 5))

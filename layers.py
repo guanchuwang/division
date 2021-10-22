@@ -17,6 +17,7 @@ from ops import mdct_conv2d, mdct_batch_norm
 # from actnn.ops import linear, batch_norm, conv1d, conv2d, conv3d, sync_batch_norm
 # from actnn.ops import conv_transpose1d, conv_transpose2d, conv_transpose3d
 # import actnn.cpp_extension.quantization as ext_quantization
+import cpp_extension.quantization as ext_quantization
 
 
 class MDCT_Conv2d(nn.Conv2d):
@@ -24,47 +25,43 @@ class MDCT_Conv2d(nn.Conv2d):
                  stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros', group=0):
         super(MDCT_Conv2d, self).__init__(in_channels, out_channels, kernel_size,
                                       stride, padding, dilation, groups, bias, padding_mode)
-        # if isinstance(kernel_size, int):
-        #     num_locations = kernel_size ** 2
-        # else:
-        #     num_locations = kernel_size[0] * kernel_size[1]
-        #
-        # if config.adaptive_conv_scheme:
-        #     self.scheme = QScheme(self, num_locations=num_locations, group=group, depthwise_groups=groups)
-        # else:
-        #     self.scheme = None
 
-        self.scheme = None
-        self.window_size = 1.
-        self.hfc_bit_num = 2
+        # self.scheme = None
+        # self.window_size = 1.
+        # self.hfc_bit_num = 2
+        # self.dct_matrix = None
 
     def forward(self, input):
-        if config.training:
-            if self.padding_mode != 'zeros':
-                return mdct_conv2d.apply(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
-                                    self.weight, self.bias, self.stride, _pair(0), self.dilation, self.groups,
-                                         self.scheme, self.window_size, self.hfc_bit_num)
-            return mdct_conv2d.apply(input, self.weight, self.bias, self.stride, self.padding, self.dilation,
-                                     self.groups, self.scheme, self.window_size, self.hfc_bit_num)
-        else:
+
+        if not config.train: # eval
             return super(MDCT_Conv2d, self).forward(input)
-        
+
+        # train
+        if self.padding_mode != 'zeros':
+            return mdct_conv2d.apply(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                                self.weight, self.bias, self.stride, _pair(0), self.dilation, self.groups)
+
+        ## Remove Prep stage ###
+        # elif config.mode == 2: # prep
+        #     # self.dct_matrix = MDCT_op.generate_dct_matrix(input.shape[-1], round(self.window_size*input.shape[-1] + 0.5))
+        #       return super(MDCT_Conv2d, self).forward(input)
+
+        return mdct_conv2d.apply(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+
 
 class MDCT_BatchNorm2d(nn.BatchNorm2d):
     def __init__(self, num_features, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True, group=0):
         super(MDCT_BatchNorm2d, self).__init__(num_features, eps, momentum, affine, track_running_stats)
-        # if config.adaptive_bn_scheme:
-        #     self.scheme = QBNScheme(group=group)
-        # else:
-        #     self.scheme = None
 
-        self.scheme = None
-        self.window_size = 1.
-        self.hfc_bit_num = 2
+        # self.scheme = None
+        # self.window_size = 1.
+        # self.hfc_bit_num = 2
+        # self.dct_matrix = None
 
     def forward(self, input):
-        if not config.training:
+        if not config.train:  # eval
             return super(MDCT_BatchNorm2d, self).forward(input)
+
 
         self._check_input_dim(input)
 
@@ -102,6 +99,80 @@ class MDCT_BatchNorm2d(nn.BatchNorm2d):
             # If buffers are not to be tracked, ensure that they won't be updated
             self.running_mean if not self.training or self.track_running_stats else None,
             self.running_var if not self.training or self.track_running_stats else None,
-            self.weight, self.bias, bn_training, exponential_average_factor, self.eps, self.scheme,
-            self.window_size, self.hfc_bit_num)
+            self.weight, self.bias, bn_training, exponential_average_factor, self.eps)
 
+        ### Remove Prep Stage ###
+        # elif config.mode == 2:  # prep
+        #     # self.dct_matrix = MDCT_op.generate_dct_matrix(input.shape[-1], round(self.window_size*input.shape[-1] + 0.5))
+        #     return super(MDCT_BatchNorm2d, self).forward(input)
+
+
+class QReLU(nn.Module):
+    def __init__(self, inplace=False):
+        super().__init__()
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return ext_quantization.act_quantized_relu(input)
+
+
+class QDropout(nn.Dropout):
+    def __init__(self, p=0.5):
+        super().__init__(p=p)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        if self.training:
+            return ext_quantization.act_quantized_dropout(input, self.p)
+        else:
+            return super(QDropout, self).forward(input)
+
+
+class QMaxPool2d(_MaxPoolNd):
+    kernel_size: _size_2_t
+    stride: _size_2_t
+    padding: _size_2_t
+    dilation: _size_2_t
+
+    def __init__(self, kernel_size, stride=None, padding=0, dilation=1,
+                 return_indices=False, ceil_mode=False):
+        super().__init__(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
+        self.kernel_size = _pair(kernel_size)
+        self.stride = _pair(stride)
+        self.padding = _pair(padding)
+        self.dilation = _pair(dilation)
+
+    def forward(self, input):
+        return ext_quantization.act_quantized_max_pool2d(
+            input, self.kernel_size, self.stride,
+            self.padding, self.dilation, self.ceil_mode,
+            self.return_indices)
+
+
+class QAvgPool2d(_AvgPoolNd):
+    __constants__ = ['kernel_size', 'stride', 'padding', 'ceil_mode', 'count_include_pad', 'divisor_override']
+
+    kernel_size: _size_2_t
+    stride: _size_2_t
+    padding: _size_2_t
+    ceil_mode: bool
+    count_include_pad: bool
+
+    def __init__(self, kernel_size: _size_2_t, stride: Optional[_size_2_t] = None, padding: _size_2_t = 0,
+                 ceil_mode: bool = False, count_include_pad: bool = True, divisor_override: bool = None) -> None:
+        super().__init__()
+        self.kernel_size = _pair(kernel_size)
+        self.stride = _pair(stride if (stride is not None) else kernel_size)
+        self.padding = _pair(padding)
+        self.ceil_mode = ceil_mode
+        self.count_include_pad = count_include_pad
+        self.divisor_override = divisor_override
+
+    def forward(self, input: Tensor) -> Tensor:
+        # TODO: implement memory-optimized cuda kernel for this.
+        #return F.avg_pool2d(input, self.kernel_size, self.stride,
+        #                    self.padding, self.ceil_mode, self.count_include_pad, self.divisor_override)
+        warnings.warn("avg_pool2d is replcaed by max_pool2d, because the optimized cuda kernel"
+                      "for avg_pool2d is not implemented.")
+        return ext_quantization.act_quantized_max_pool2d(
+            input, self.kernel_size, self.stride,
+            self.padding, (1, 1), self.ceil_mode,
+            False)

@@ -30,12 +30,17 @@ def compute_tensor_bytes(tensors):
 
     ret = 0
     for x in tensors:
-        if x.dtype in [torch.float32, torch.int]:
-            ret += np.prod(x.size()) * 4 
-        elif x.dtype in [torch.bfloat16, torch.float16, torch.int16]:
-            ret += np.prod(x.size()) * 2
-        elif x.dtype in [torch.int8]:
-            ret += np.prod(x.size()) * 2
+        if torch.is_tensor(x):
+            print(x.shape)
+            print(x.dtype)
+            import sys
+            print(sys.getsizeof(x.storage()))
+            if x.dtype in [torch.float32, torch.int]:
+                ret += np.prod(x.size()) * 4
+            elif x.dtype in [torch.bfloat16, torch.float16, torch.int16]:
+                ret += np.prod(x.size()) * 2
+            elif x.dtype in [torch.int8]:
+                ret += np.prod(x.size()) * 2
 
     return ret
 

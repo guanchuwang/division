@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="8850f401-1095-4e7e-a577-8b26e5a1a73c" name="datalab5_eff_contrastive" url="http://datalab5.engr.tamu.edu">
+        <fileTransfer host="datalab5.engr.tamu.edu" port="22" rootFolder="/home/grads/h/hegsns" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

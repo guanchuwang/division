@@ -1,53 +1,44 @@
 from typing import Union, Tuple, Any, Callable, Iterator, Set, Optional, overload, TypeVar, Mapping, Dict
 from collections import OrderedDict
+import os
 
 import torch
 import torch.nn as nn
 from torch import Tensor, device, dtype
 
-from layers import MDCT_Conv2d, MDCT_BatchNorm2d # MDCT_Conv1d,
-# from actnn.layers import QConv1d, QConv2d, QConv3d, QConvTranspose1d, QConvTranspose2d, QConvTranspose3d, \
-#     QBatchNorm1d, QBatchNorm2d, QBatchNorm3d, QSyncBatchNorm, \
-#     QReLU, QDropout, QLinear, QMaxPool2d, QAvgPool2d
-from conf import config
+from layers import MDCT_Conv2d, MDCT_BatchNorm2d, QReLU # MDCT_Conv1d,
 
+from conf import config
+from torch.cuda.amp import autocast # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
 
 class MDCT_Module(nn.Module):
+
     def __init__(self, model):
-        super().__init__()
+        super(MDCT_Module, self).__init__()
         self.model = model
-        MDCT_Module.convert_layers(model)
+        MDCT_Module.convert_layers(self.model)
 
     # @staticmethod
-    # def layer_print(module):
-
-    @staticmethod
-    def update_conv_window_size(module, window_size=1., hfc_bit_num=2, barrier_num=8, max_search_time=8, min_window_size=0):
-
-        for name, child in module.named_children():
-            # Do not convert layers that are already quantized
-            if isinstance(child, (MDCT_Conv2d)):
-                child.window_size = window_size
-                child.hfc_bit_num = hfc_bit_num
-                child.barrier_num = barrier_num
-                child.max_search_time = max_search_time
-                child.min_window_size = min_window_size
-            else:
-                MDCT_Module.update_conv_window_size(child, window_size, hfc_bit_num, barrier_num, max_search_time, min_window_size)
-
-    @staticmethod
-    def update_bn_window_size(module, window_size=1., hfc_bit_num=2, barrier_num=8, max_search_time=8, min_window_size=0):
-
-        for name, child in module.named_children():
-            # Do not convert layers that are already quantized
-            if isinstance(child, MDCT_BatchNorm2d):
-                child.window_size = window_size
-                child.hfc_bit_num = hfc_bit_num
-                child.barrier_num = barrier_num
-                child.max_search_time = max_search_time
-                child.min_window_size = min_window_size
-            else:
-                MDCT_Module.update_bn_window_size(child, window_size, hfc_bit_num, barrier_num, max_search_time, min_window_size)
+    # def update_conv_window_size(module, window_size=1., hfc_bit_num=2):
+    #
+    #     for name, child in module.named_children():
+    #         # Do not convert layers that are already quantized
+    #         if isinstance(child, (MDCT_Conv2d)):
+    #             child.window_size = window_size
+    #             child.hfc_bit_num = hfc_bit_num
+    #         else:
+    #             MDCT_Module.update_conv_window_size(child, window_size, hfc_bit_num)
+    #
+    # @staticmethod
+    # def update_bn_window_size(module, window_size=1., hfc_bit_num=2):
+    #
+    #     for name, child in module.named_children():
+    #         # Do not convert layers that are already quantized
+    #         if isinstance(child, MDCT_BatchNorm2d):
+    #             child.window_size = window_size
+    #             child.hfc_bit_num = hfc_bit_num
+    #         else:
+    #             MDCT_Module.update_bn_window_size(child, window_size, hfc_bit_num)
 
     @staticmethod
     def convert_layers(module):
@@ -97,8 +88,8 @@ class MDCT_Module(nn.Module):
             # elif isinstance(child, nn.Linear):
             #     setattr(module, name, QLinear(child.in_features, child.out_features,
             #         child.bias is not None))
-            # elif isinstance(child, nn.ReLU):
-            #     setattr(module, name, QReLU())
+            elif isinstance(child, nn.ReLU):
+                setattr(module, name, QReLU())
             # elif isinstance(child, nn.Dropout):
             #     setattr(module, name, QDropout(child.p))
             # elif isinstance(child, nn.MaxPool2d):
@@ -113,27 +104,59 @@ class MDCT_Module(nn.Module):
             else:
                 MDCT_Module.convert_layers(child)
 
+    # @autocast()
     def forward(self, *args, **kwargs):
+        # with autocast():
         return self.model(*args, **kwargs)
 
     def train(self, mode: bool = True):
-        config.training = mode
-        return super().train(mode)
+        config.train = mode
+        return super(MDCT_Module, self).train(mode)
 
     def eval(self):
-        config.training = False
-        return super().eval()
+        config.train = False
+        return super(MDCT_Module, self).eval()
 
     def load_state_dict(self, state_dict: Union[Dict[str, Tensor], Dict[str, Tensor]],
                         strict: bool = True):
         # remove the prefix "model." added by this wrapper
         new_state_dict = OrderedDict([("model." + k,  v) for k, v in state_dict.items()])
-        return super().load_state_dict(new_state_dict, strict)
+        return super(MDCT_Module, self).load_state_dict(new_state_dict, strict)
 
     def state_dict(self, destination=None, prefix='', keep_vars=False):
-        ret = super().state_dict(destination, prefix, keep_vars)
+        ret = super(MDCT_Module, self).state_dict(destination, prefix, keep_vars)
 
         # remove the prefix "model." added by this wrapper
         ret = OrderedDict([(k[6:], v) for k, v in ret.items()])
         return ret
+
+    # def train(self, mode=True):
+    #     config.mode = 0 if mode == True else 1
+    #     return super(MDCT_Module, self).train(mode)
+    #
+    # def eval(self):
+    #     config.mode = 1
+    #     return super(MDCT_Module, self).eval()
+    #
+    # def prep(self, input_shape):
+    #     super(MDCT_Module, self).eval()
+    #     config.mode = 2
+    #     prob_x = torch.ones(input_shape)
+    #     self.model(prob_x)
+    #     return self.train()  # default as train state
+
+    # def cuda(self, device=None):
+    #     MDCT_Module.matrix_cuda(self.model, device)
+    #     return super(MDCT_Module, self).cuda(device)
+    #
+    # @staticmethod
+    # def matrix_cuda(module, device=None):
+    #
+    #     for name, child in module.named_children():
+    #         if hasattr(child, "dct_matrix"):
+    #             child.dct_matrix.cuda(device)
+    #             print(child, device, child.dct_matrix.device)
+    #         else:
+    #             MDCT_Module.matrix_cuda(child, device)
+
 

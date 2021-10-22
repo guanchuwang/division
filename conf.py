@@ -1,6 +1,7 @@
 import ast
 import os
 import warnings
+import json
 
 def set_optimization_level(level):
     if level == 'L0':      # Do nothing
@@ -38,18 +39,22 @@ def set_optimization_level(level):
 class QuantizationConfig:
     def __init__(self):
         self.compress_activation = True
-        # self.activation_compression_bits = [2, 8, 8]
+        self.activation_compression_bits = [2, 8, 8]
         self.pergroup = True
         self.perlayer = True
         self.initial_bits = 8
         self.stochastic = True
-        self.training = True
+        self.train = True
         self.group_size = 256
         self.use_gradient = False
         self.adaptive_conv_scheme = True
         self.adaptive_bn_scheme = True
         self.simulate = False
         self.compress_bn_input = True
+        self.conv_window_size = 1
+        self.bn_window_size = 1
+        self.hfc_bit_num = 2
+        self.round_window = True
 
         # Memory management flag
         self.empty_cache_threshold = None
@@ -64,6 +69,10 @@ class QuantizationConfig:
         self.debug_memory_op_backward = False # True #
         self.debug_remove_bn = False
         self.debug_remove_relu = False
+
+    def __str__(self):
+        return json.dumps(self.__dict__)
+
 
 config = QuantizationConfig()
 
