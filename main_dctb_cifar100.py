@@ -2,7 +2,6 @@ import argparse
 import os
 import random
 import shutil
-import pdb
 import time
 import warnings
 import builtins
@@ -26,9 +25,10 @@ import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before 
 import cifar_models.dctb as models
 from module import MDCT_Module
 # from utils.mdct_utils import WarmUpLR
+from torch.cuda.amp import autocast as autocast, GradScaler
 
 from timer import global_timer
-from conf import config
+from conf import config, QuantizationConfig
 # import actnn
 
 
@@ -71,9 +71,7 @@ parser.add_argument('--world-size', default=-1, type=int,
                     help='number of nodes for distributed training')
 parser.add_argument('--rank', default=-1, type=int,
                     help='node rank for distributed training')
-# parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
-#                     help='url used to set up distributed training')
-parser.add_argument('--dist-url', default='tcp://localhost:10002', type=str,
+parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
                     help='url used to set up distributed training')
 parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
@@ -97,21 +95,21 @@ parser.add_argument('--simulate', action='store_true', help='Simulate the quanti
 parser.add_argument("--group_size", type=int, default=256, help="")
 parser.add_argument("--round_window", type=bool, default=True, help="")
 
+args_fdmp = parser.parse_args()
+config.conv_window_size = args_fdmp.conv_window_size
+config.simulate = args_fdmp.simulate
+config.group_size = args_fdmp.group_size
+config.conv_window_size = args_fdmp.conv_window_size
+config.bn_window_size = args_fdmp.bn_window_size
+config.hfc_bit_num = args_fdmp.hfc_bit_num
+config.round_window = args_fdmp.round_window
+os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+
 best_acc1 = 0
 
 def main():
     args = parser.parse_args()
-    gpu_devices = ','.join([str(id) for id in args.gpu_devices])
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
-    config.simulate = args.simulate
-    config.group_size = args.group_size
-    config.conv_window_size = args.conv_window_size
-    config.bn_window_size = args.bn_window_size
-    config.hfc_bit_num = args.hfc_bit_num
-    config.round_window = args.round_window
-    # actnn.set_optimization_level("L3")
     print(args)
-
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -133,6 +131,7 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
+
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -150,10 +149,10 @@ def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
 
     # suppress printing if not master
-    if args.multiprocessing_distributed and args.gpu != 0:
-        def print_pass(*args, **kwargs):
-            pass
-        builtins.print = print_pass
+    # if args.multiprocessing_distributed and args.gpu != 0:
+    #     def print_pass(*args, **kwargs):
+    #         pass
+    #     builtins.print = print_pass
 
     if args.gpu is not None:
         print("Use GPU: {} for training".format(args.gpu))
@@ -180,6 +179,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # MDCT_Module.update_conv_window_size(model, window_size=args.conv_window_size, hfc_bit_num=args.hfc_bit_num)
     # MDCT_Module.update_bn_window_size(model, window_size=args.bn_window_size, hfc_bit_num=args.hfc_bit_num)
     # model.prep(input_shape=(64, 3, 32, 32))
+
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     elif args.distributed:
@@ -284,6 +284,7 @@ def main_worker(gpu, ngpus_per_node, args):
         num_workers=args.workers, pin_memory=True)
 
     # warmup_scheduler = WarmUpLR(optimizer, len(train_loader))
+    grad_scaler = GradScaler()
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
@@ -295,7 +296,7 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train(train_loader, model, criterion, optimizer, epoch, args, grad_scaler)
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
@@ -319,7 +320,7 @@ def main_worker(gpu, ngpus_per_node, args):
         scheduler.step()
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+def train(train_loader, model, criterion, optimizer, epoch, args, grad_scaler):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -348,22 +349,33 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output
         torch.cuda.synchronize()
         batch_update_start_time = time.time()
-        output = model(images)
-        torch.cuda.synchronize()
-        batch_update_end_time = time.time()
-        print(f'foward time: {batch_update_end_time - batch_start_time}')
-        print(f'allocated mem: {torch.cuda.memory_allocated() / 2 ** 20}')
-        loss = criterion(output, target)
+
+        # output = model(images) # , window_size=args.window_size)
+        # loss = criterion(output, target)
+        #
+        # # compute gradient and do SGD step
+        # optimizer.zero_grad()
+        # loss.backward()
+        # optimizer.step()
+
+        # hegsns
 
         # amp
-        # with amp.autocast():
-        #     output = model(images)
-        #     loss = criterion(output, target)
+        with autocast():
+            output = model(images)
+            loss = criterion(output, target)
 
-        # compute gradient and do SGD step
+        print("Forward!")
+        print(loss, loss.dtype)
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+        # grad_scaler.scale(loss).backward()
+        # grad_scaler.step(optimizer)
+        # grad_scaler.update()
+
         torch.cuda.synchronize()
         batch_update_end_time = time.time()
 

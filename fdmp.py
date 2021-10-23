@@ -6,7 +6,9 @@ from torch.cuda.amp import autocast
 import cpp_extension.quantization as ext_quantization
 import cpp_extension.minimax as ext_minimax
 # import cpp_extension.backward_func as ext_backward_func
+from torch.cuda.amp import autocast as autocast
 
+import numpy as np
 from conf import config
 import time
 
@@ -71,7 +73,8 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def fdmp(x, window_size=1, device=None):
+    @autocast()
+    def fdmp(x, window_size, device=None):
 
         if window_size >= 1:
             return x, None, None, None, None
@@ -80,8 +83,8 @@ class FDMP(Function):
             return FDMP.fdmp_simulation(x, window_size, device)
 
         x_lfc_dct, x_lfc, x_hfc = MDCT_op.freq_divide(x, window_size, device)
-        print(f'In fdmp, x_lfc_dct.shape: {x_lfc_dct.shape}')
         # q_bits = int(quant_bit)
+
         # t0 = time.time()
         x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, device)
         q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
@@ -94,7 +97,8 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp(feature_pack, q_input_shape, window_size=1, device=None):
+    @autocast()
+    def de_fdmp(feature_pack, q_input_shape, window_size, device=None):
 
         if window_size >= 1:
             x, _, _, _, _ = feature_pack
@@ -127,6 +131,7 @@ class FDMP(Function):
         x = x_lfc + x_hfc_dequant
 
         return x
+        # return x.to(torch.float)
 
     @staticmethod
     @torch.no_grad()
@@ -144,7 +149,7 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp_simulation(feature_pack, q_input_shape, window_size=1, device=None):
+    def de_fdmp_simulation(feature_pack, q_input_shape, window_size, device=None):
 
         x_lfc_dct, x_hfc_quant, x_min_group, quant_step = feature_pack
         x_hfc_dequant = x_hfc_quant.type(torch.float) * quant_step + x_min_group
@@ -173,8 +178,8 @@ class MDCT_op(Function):
 
         i_matrix, j_matrix = torch.meshgrid(i_vector, j_vector)
 
-        dct_matrix = torch.sqrt((1 + (i_matrix != 0) * 1) / N) \
-                     * torch.cos((2 * j_matrix + 1) * 3.14159265 / (2 * N) * i_matrix)
+        dct_matrix = torch.sqrt((1 + (i_matrix != 0) * 1) / N) * \
+                     torch.cos((2 * j_matrix + 1) * 3.141592653589793 / (2 * N) * i_matrix)
 
         return dct_matrix
         # return torch.nn.Parameter(dct_matrix, requires_grad=False)

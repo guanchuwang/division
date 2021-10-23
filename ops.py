@@ -6,15 +6,15 @@ from torch.nn.modules.utils import _single, _pair, _triple
 import cpp_extension.backward_func as ext_backward_func
 from conf import config
 import time
+from torch.cuda.amp import autocast as autocast
 
-import time
 from utils.actnn_utils import *
 # from utils.mdct_utils import *
 from timer import global_timer
 # from dct_matrix import generate_dct_matrix, dct_2d, zero_padding
 
 from fdmp import MDCT_op, FDMP
-from conf import config
+from conf import config, QuantizationConfig
 
 conv2d_layer_ct = 0
 bn_layer_ct = 0
@@ -30,15 +30,10 @@ class mdct_convnd(Function):
 
         # t0 = time.time()
         # dct_matrix = MDCT_op.generate_dct_matrix2(input.shape[-1], round(config.conv_window_size*input.shape[-1] + 0.5), weight.device)
+        # torch.cuda.synchronize()
         # t1 = time.time()
         feature_pack = FDMP.fdmp(input, config.conv_window_size, weight.device)
         # print(t1 - t0)
-
-        # dct_matrix = dct_matrix_buf[input.shape[-1]]
-        # feature_pack = FDMP.fdmp(dct_matrix.to(input.device), input, hfc_bit_num)
-
-        # torch.cuda.synchronize()
-        # global_timer.run(time.time() - time1, 'dct')
 
         ## Save variable for backward
         # ctx.scheme = scheme
@@ -88,6 +83,14 @@ class mdct_convnd(Function):
             get_memory_usage(True)
             conv2d_layer_ct += 1
             print("WS: %.2f MB" % (compute_tensor_bytes([grad_output, input, input]) / 1024 ** 2))
+
+        # input = input.to(torch.float)
+        print(input.dtype)
+        print(grad_output.dtype)
+        print(weight.dtype)
+        print(bias)
+        print(ctx.needs_input_grad[0], ctx.needs_input_grad[1])
+        # hegsns
 
         use_pipeline = False
         if config.pipeline_threshold:
@@ -205,6 +208,10 @@ class mdct_batch_norm(Function):
             print("========== bn backward %d ==========" % bn_layer_ct)
             get_memory_usage(True)
             bn_layer_ct += 1
+
+        print(input.dtype)
+        print(grad_output.dtype)
+        print(weight.dtype)
 
         if training:
             input = input.contiguous()
