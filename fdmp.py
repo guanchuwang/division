@@ -6,15 +6,23 @@ from torch.cuda.amp import autocast
 import cpp_extension.quantization as ext_quantization
 import cpp_extension.minimax as ext_minimax
 # import cpp_extension.backward_func as ext_backward_func
-from torch.cuda.amp import autocast as autocast
+# from torch.cuda.amp import autocast as autocast
 
 import numpy as np
 from conf import config
 import time
 
-class FDMP(Function):
 
-    # @autocast()
+@torch.no_grad()
+def abs_window_size(N, window_size):
+    if config.round_window:
+        return round(window_size*N + 0.5)
+    else:
+        return round(window_size*N)
+
+
+class FDMP_(Function):
+
     @staticmethod
     @torch.no_grad()
     def no_scheme_compute_quantization_bits(input, device):
@@ -73,21 +81,44 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    @autocast()
-    def fdmp(x, window_size, device=None):
+    def freq_divide(x, dct_op, window_size, device=None):
+
+        # print(x.device, self.dct_layer.weight.device)
+
+        if window_size <= 0:
+            return None, torch.zeros_like(x, device=device), x
+
+        N = x.shape[-1]
+        n = abs_window_size(N, window_size)
+        dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+
+        x_lfc_dct = dct_op(dct_matrix, x)
+        x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+
+        # print(dct_matrix.dtype)
+        # print(x.dtype)
+        # print(x_lfc_dct.dtype)
+        # print(x_lfc.dtype)
+        # hegsns
+
+        return x_lfc_dct, x_lfc, x - x_lfc
+
+    @staticmethod
+    @torch.no_grad()
+    def fdmp(x, dct_op, window_size, device):
 
         if window_size >= 1:
             return x, None, None, None, None
 
         if config.simulate:
-            return FDMP.fdmp_simulation(x, window_size, device)
+            return FDMP_.fdmp_simulation(x, dct_op, window_size, device)
 
-        x_lfc_dct, x_lfc, x_hfc = MDCT_op.freq_divide(x, window_size, device)
+        x_lfc_dct, x_lfc, x_hfc = FDMP_.freq_divide(x, dct_op, window_size, device)
         # q_bits = int(quant_bit)
 
         # t0 = time.time()
-        x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, device)
-        q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
+        x_hfc_groups, q_bits, q_min, mx = FDMP_.no_scheme_compute_quantization_bits(x_hfc, device)
+        q_input, q_scale = FDMP_.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
         # torch.cuda.synchronize()
 
         if x.dtype == torch.float32:
@@ -97,22 +128,21 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    @autocast()
-    def de_fdmp(feature_pack, q_input_shape, window_size, device=None):
+    def de_fdmp(feature_pack, dct_op, q_input_shape, window_size, device):
 
         if window_size >= 1:
             x, _, _, _, _ = feature_pack
             return x
 
         if config.simulate:
-            return FDMP.de_fdmp_simulation(feature_pack, q_input_shape, window_size, device)
+            return FDMP_.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
 
         x_lfc_dct, q_input, q_bits, q_scale, q_min = feature_pack
 
         if q_scale.dtype == torch.bfloat16:
             q_scale = q_scale.to(torch.float32)
             q_min = q_min.to(torch.float32)
-        x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min)
+        x_hfc_dequant = FDMP_.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min)
 
         # Remove padding
         N = q_input_shape[0]
@@ -126,8 +156,9 @@ class FDMP(Function):
         # print(x_lfc_dct.shape)
         N = q_input_shape[-1]
         n = abs_window_size(N, window_size)
-        dct_matrix = MDCT_op.generate_dct_matrix(N, n, device)
-        x_lfc = MDCT_op.idct_2d(dct_matrix, x_lfc_dct)
+        dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+
+        x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
         x = x_lfc + x_hfc_dequant
 
         return x
@@ -135,21 +166,21 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def fdmp_simulation(x, window_size, device=None):
+    def fdmp_simulation(x, dct_op, window_size, device):
 
-        x_lfc_dct, x_lfc, x_hfc = MDCT_op.freq_divide(x, window_size, device=None)
+        x_lfc_dct, x_lfc, x_hfc = FDMP_.freq_divide(x, dct_op, window_size, device=device)
         x_min_group = x_hfc.min(dim=2)[0].min(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
         x_max_group = x_hfc.max(dim=2)[0].max(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
-        quant_step = (x_max_group - x_min_group) / (2 ** quant_bit) + 1e-8
+        quant_step = (x_max_group - x_min_group) / (2 ** config.hfc_bit_num) + 1e-8
         x_reference = x_min_group  # + quant_step/2
         x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step)  # .type(torch.int)
-        x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** quant_bit - 1).type(torch.int)
+        x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
 
         return x_lfc_dct, x_hfc_quant, x_min_group, quant_step
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp_simulation(feature_pack, q_input_shape, window_size, device=None):
+    def de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device):
 
         x_lfc_dct, x_hfc_quant, x_min_group, quant_step = feature_pack
         x_hfc_dequant = x_hfc_quant.type(torch.float) * quant_step + x_min_group
@@ -159,19 +190,19 @@ class FDMP(Function):
 
         N = q_input_shape[-1]
         n = abs_window_size(N, window_size)
-        dct_matrix = MDCT_op.generate_dct_matrix(N, n, device)
+        dct_matrix = WDCT.generate_dct_matrix(N, n, device)
 
-        x_lfc = MDCT_op.idct_2d(dct_matrix, x_lfc_dct)
+        x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
         x = x_lfc + x_hfc_dequant
 
         return x
 
 
-class MDCT_op(Function):
+class WDCT(Function):
 
     @staticmethod
     @torch.no_grad()
-    def generate_dct_matrix(N, n, device=None):
+    def generate_dct_matrix(N, n, device):
 
         i_vector = torch.arange(n, device=device)
         j_vector = torch.arange(N, device=device)
@@ -186,8 +217,38 @@ class MDCT_op(Function):
 
     @staticmethod
     @torch.no_grad()
-    def dct_2d(dct_matrix, x):
+    def dct_1d_(dct_matrix, x):  # needs to debug
 
+        n2, n1 = dct_matrix.shape
+
+        x_shape = x.shape
+        x = x.contiguous().view(-1, n1)
+        # x = layer(x)
+        x = x.mm(dct_matrix.T)
+
+        # print(x.shape)
+        x = x.view((n2, x_shape[0])).permute(1, 0)
+
+        return x
+
+    @staticmethod
+    @torch.no_grad()
+    def idct_1d_(dct_matrix, x_dct):
+        return WDCT.dct_1d_(dct_matrix.T, x_dct)
+
+    @staticmethod
+    @torch.no_grad()
+    def dct_1d(dct_matrix, x, inverse=False):
+
+        if not inverse:
+            return WDCT.dct_1d_(dct_matrix, x)
+
+        else:
+            return WDCT.idct_1d_(dct_matrix, x)
+
+    @staticmethod
+    @torch.no_grad()
+    def dct_2d_(dct_matrix, x):
         # layer = self.idct_layer if inverse else self.dct_layer
         # n1, n2 = (self.n, self.N) if inverse else (self.N, self.n)
         # print("====================")
@@ -202,43 +263,184 @@ class MDCT_op(Function):
         x = x.T.contiguous().view(-1, n1)
         # x = layer(x).T
         x = x.mm(dct_matrix.T).T
+
         x = x.view((n2, n2, x_shape[0], x_shape[1])).permute(2, 3, 0, 1)
 
         return x
-        # return self.zero_padder(x)
 
     @staticmethod
     @torch.no_grad()
-    def idct_2d(dct_matrix, x_dct):
-        return MDCT_op.dct_2d(dct_matrix.T, x_dct)
+    def idct_2d_(dct_matrix, x_dct):
+        return WDCT.dct_2d_(dct_matrix.T, x_dct)
 
     @staticmethod
     @torch.no_grad()
-    def freq_divide(x, window_size, device=None):
+    def dct_2d(dct_matrix, x, inverse=False):
 
-        # print(x.device, self.dct_layer.weight.device)
+        if not inverse:
+            return WDCT.dct_2d_(dct_matrix, x)
 
-        if window_size <= 0:
-            return None, torch.zeros_like(x, device=device), x
+        else:
+            return WDCT.idct_2d_(dct_matrix, x)
 
-        N = x.shape[-1]
-        n = abs_window_size(N, window_size)
-        dct_matrix = MDCT_op.generate_dct_matrix(N, n, device)
-        x_lfc_dct = MDCT_op.dct_2d(dct_matrix, x)
-        x_lfc = MDCT_op.idct_2d(dct_matrix, x_lfc_dct)
+    @staticmethod
+    @torch.no_grad()
+    def dct_3d_(dct_matrix, x):
 
-        return x_lfc_dct, x_lfc, x - x_lfc
+        n2, n1 = dct_matrix.shape
 
-    # def cuda(self, gpu):
-    #
-    #     self.dct_matrix.cuda(gpu)
+        x_shape = x.shape
+        x = x.contiguous().view(-1, n1)
+        x = x.mm(dct_matrix.T)
 
-@torch.no_grad()
-def abs_window_size(N, window_size):
-    if config.round_window:
-        return round(window_size*N + 0.5)
-    else:
-        return round(window_size*N)
+        x = x.T.contiguous().view(-1, n1)
+        x = x.mm(dct_matrix.T).T
+
+        x = x.T.contiguous().view(-1, n1)
+        x = x.mm(dct_matrix.T).T
+
+        x = x.view((n2, n2, n2, x_shape[0], x_shape[1])).permute(2, 3, 4, 0, 1)
+
+        return x
+
+    @staticmethod
+    @torch.no_grad()
+    def idct_3d_(dct_matrix, x_dct):
+        return WDCT.dct_3d_(dct_matrix.T, x_dct)
+
+    @staticmethod
+    @torch.no_grad()
+    def dct_3d(dct_matrix, x, inverse=False):
+
+        if not inverse:
+            return WDCT.dct_3d_(dct_matrix, x)
+
+        else:
+            return WDCT.idct_3d_(dct_matrix, x)
+
+
+# class WDCT1d(WDCT):
+#
+#     @staticmethod
+#     @torch.no_grad()
+#     def dct(dct_matrix, x):  # needs to debug
+#
+#         n2, n1 = dct_matrix.shape
+#
+#         x_shape = x.shape
+#         x = x.contiguous().view(-1, n1)
+#         # x = layer(x)
+#         x = x.mm(dct_matrix.T)
+#         x = x.view((n2, x_shape[0], x_shape[1])).permute(2, 0, 1)
+#
+#         return x
+#
+#     @staticmethod
+#     @torch.no_grad()
+#     def idct(dct_matrix, x_dct):
+#         return WDCT1d.dct(dct_matrix.T, x_dct)
+#
+#
+# class WDCT2d(WDCT):
+#
+#     @staticmethod
+#     @torch.no_grad()
+#     def dct(dct_matrix, x):
+#         # layer = self.idct_layer if inverse else self.dct_layer
+#         # n1, n2 = (self.n, self.N) if inverse else (self.N, self.n)
+#         # print("====================")
+#         # print(x.device, dct_matrix.device)
+#
+#         n2, n1 = dct_matrix.shape
+#
+#         x_shape = x.shape
+#         x = x.contiguous().view(-1, n1)
+#         # x = layer(x)
+#         x = x.mm(dct_matrix.T)
+#         x = x.T.contiguous().view(-1, n1)
+#         # x = layer(x).T
+#         x = x.mm(dct_matrix.T).T
+#
+#         x = x.view((n2, n2, x_shape[0], x_shape[1])).permute(2, 3, 0, 1)
+#
+#         return x
+#
+#     @staticmethod
+#     @torch.no_grad()
+#     def idct(dct_matrix, x_dct):
+#         return WDCT2d.dct(dct_matrix.T, x_dct)
+
+
+class FDMP(Function):
+
+    @staticmethod
+    @torch.no_grad()
+    def no_scheme_compute_quantization_bits(input, device):
+        if not config.half_precision:
+            return FDMP_.no_scheme_compute_quantization_bits(input, device)
+        else:
+            with autocast():
+                return FDMP_.no_scheme_compute_quantization_bits(input, device)
+
+    @staticmethod
+    @torch.no_grad()
+    def quantize_and_pack(data, bits, mn, mx):
+        if not config.half_precision:
+            return FDMP_.quantize_and_pack(data, bits, mn, mx)
+        else:
+            with autocast():
+                return FDMP_.quantize_and_pack(data, bits, mn, mx)
+
+    @staticmethod
+    @torch.no_grad()
+    def dequantize_and_unpack(data, shape, bits, scale, mn):
+        if not config.half_precision:
+            return FDMP_.dequantize_and_unpack(data, shape, bits, scale, mn)
+        else:
+            with autocast():
+                return FDMP_.dequantize_and_unpack(data, shape, bits, scale, mn)
+
+    @staticmethod
+    @torch.no_grad()
+    def fdmp(x, dct_op, window_size, device):
+        if not config.half_precision:
+            return FDMP_.fdmp(x, dct_op, window_size, device)
+        else:
+            with autocast():
+                return FDMP_.fdmp(x, dct_op, window_size, device)
+
+    @staticmethod
+    @torch.no_grad()
+    def de_fdmp(feature_pack, dct_op, q_input_shape, window_size, device):
+        if not config.half_precision:
+            return FDMP_.de_fdmp(feature_pack, dct_op, q_input_shape, window_size, device)
+        else:
+            with autocast():
+                return FDMP_.de_fdmp(feature_pack, dct_op, q_input_shape, window_size, device)
+
+    @staticmethod
+    @torch.no_grad()
+    def fdmp_simulation(x, dct_op, window_size, device):
+        if not config.half_precision:
+            return FDMP_.fdmp_simulation(x, dct_op, window_size, device)
+        else:
+            with autocast():
+                return FDMP_.fdmp_simulation(x, dct_op, window_size, device)
+
+    @staticmethod
+    @torch.no_grad()
+    def de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device):
+        if not config.half_precision:
+            return FDMP_.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
+        else:
+            with autocast():
+                return FDMP_.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
+
+
+
+
+
+
 
 # class DCT_matrix:
 #
@@ -254,7 +456,7 @@ def abs_window_size(N, window_size):
 #
 #             return
 #
-#         self.dct_matrix_dict[str(N)] = MDCT_op.generate_dct_matrix(N, n)
+#         self.dct_matrix_dict[str(N)] = WDCT.generate_dct_matrix(N, n)
 #
 #         return
 #

@@ -19,18 +19,14 @@ import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-
-import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
-# import torchvision.models as models
 import cifar_models.dctb as models
-from module import MDCT_Module
-# from utils.mdct_utils import WarmUpLR
-from torch.cuda.amp import autocast as autocast, GradScaler
+
+# import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
+# import torchvision.models as models
 
 from timer import global_timer
 from conf import config, QuantizationConfig
 # import actnn
-
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -85,6 +81,7 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 
+parser.add_argument("--num_class", type=int, default=100, help="")
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
 parser.add_argument("--conv_window_size", type=float, default=1, help="")
 parser.add_argument("--bn_window_size", type=float, default=1, help="")
@@ -94,6 +91,7 @@ parser.add_argument("--save_period", type=int, default=10, help="")
 parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
 parser.add_argument("--group_size", type=int, default=256, help="")
 parser.add_argument("--round_window", type=bool, default=True, help="")
+parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
 
 args_fdmp = parser.parse_args()
 config.conv_window_size = args_fdmp.conv_window_size
@@ -103,7 +101,11 @@ config.conv_window_size = args_fdmp.conv_window_size
 config.bn_window_size = args_fdmp.bn_window_size
 config.hfc_bit_num = args_fdmp.hfc_bit_num
 config.round_window = args_fdmp.round_window
+config.half_precision = args_fdmp.half_precision
 os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+
+from module import FDMP_Module
+from torch.cuda.amp import autocast as autocast, GradScaler
 
 best_acc1 = 0
 
@@ -149,10 +151,10 @@ def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
 
     # suppress printing if not master
-    # if args.multiprocessing_distributed and args.gpu != 0:
-    #     def print_pass(*args, **kwargs):
-    #         pass
-    #     builtins.print = print_pass
+    if args.multiprocessing_distributed and args.gpu != 0:
+        def print_pass(*args, **kwargs):
+            pass
+        builtins.print = print_pass
 
     if args.gpu is not None:
         print("Use GPU: {} for training".format(args.gpu))
@@ -169,16 +171,13 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True)
+        model = models.__dict__[args.arch](pretrained=True) # , num_classes=args.num_class)
     else:
         print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]()
+        model = models.__dict__[args.arch]() # num_classes=args.num_class)
 
 
-    model = MDCT_Module(model)
-    # MDCT_Module.update_conv_window_size(model, window_size=args.conv_window_size, hfc_bit_num=args.hfc_bit_num)
-    # MDCT_Module.update_bn_window_size(model, window_size=args.bn_window_size, hfc_bit_num=args.hfc_bit_num)
-    # model.prep(input_shape=(64, 3, 32, 32))
+    model = FDMP_Module(model)
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -284,7 +283,7 @@ def main_worker(gpu, ngpus_per_node, args):
         num_workers=args.workers, pin_memory=True)
 
     # warmup_scheduler = WarmUpLR(optimizer, len(train_loader))
-    grad_scaler = GradScaler()
+    # grad_scaler = GradScaler()
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
@@ -296,7 +295,7 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args, grad_scaler)
+        train(train_loader, model, criterion, optimizer, epoch, args)
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
@@ -320,7 +319,7 @@ def main_worker(gpu, ngpus_per_node, args):
         scheduler.step()
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args, grad_scaler):
+def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -335,39 +334,34 @@ def train(train_loader, model, criterion, optimizer, epoch, args, grad_scaler):
     # switch to train mode
     model.train()
 
-    end = time.time()
+    # end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
+        torch.cuda.synchronize()
         batch_start_time = time.time()
-        data_time.update(time.time() - end)
+        # data_time.update(time.time() - end)
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
         if torch.cuda.is_available():
             target = target.cuda(args.gpu, non_blocking=True)
 
-        # compute output
-        torch.cuda.synchronize()
-        batch_update_start_time = time.time()
+        # batch_update_start_time = time.time()
 
-        # output = model(images) # , window_size=args.window_size)
+        # output = model(images)
         # loss = criterion(output, target)
-        #
-        # # compute gradient and do SGD step
-        # optimizer.zero_grad()
-        # loss.backward()
-        # optimizer.step()
-
         # hegsns
 
         # amp
-        with autocast():
+        if not config.half_precision:
             output = model(images)
             loss = criterion(output, target)
+        else:
+            with autocast():
+                output = model(images)
+                loss = criterion(output, target)
 
-        print("Forward!")
-        print(loss, loss.dtype)
-
+        # # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -386,9 +380,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args, grad_scaler):
         top5.update(acc5[0], images.size(0))
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
-        throughput.update(args.batch_size/(batch_update_end_time - batch_update_start_time))
-        end = time.time()
+        batch_time.update(batch_update_end_time - batch_start_time)
+        throughput.update(args.batch_size/(batch_update_end_time - batch_start_time))
+        # end = time.time()
 
         if i % args.print_freq == 0:
             progress.display(i)

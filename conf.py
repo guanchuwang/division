@@ -2,7 +2,7 @@ import ast
 import os
 import warnings
 import json
-   
+
 # def set_optimization_level(level):
 #     if level == 'L0':      # Do nothing
 #         config.compress_activation = False
@@ -55,6 +55,7 @@ class QuantizationConfig:
         self.bn_window_size = 1
         self.hfc_bit_num = 2
         self.round_window = True
+        self.half_precision = False
 
         # Memory management flag
         self.empty_cache_threshold = None
@@ -65,8 +66,8 @@ class QuantizationConfig:
         # Debug related flag
         self.debug_memory_model = ast.literal_eval(os.environ.get('DEBUG_MEM', "False"))
         self.debug_speed = ast.literal_eval(os.environ.get('DEBUG_SPEED', "False"))
-        self.debug_memory_op_forward = True # False #
-        self.debug_memory_op_backward = True # False #
+        self.debug_memory_op_forward = False # True #
+        self.debug_memory_op_backward = False # True #
         self.debug_remove_bn = False
         self.debug_remove_relu = False
 
