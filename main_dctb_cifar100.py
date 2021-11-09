@@ -25,7 +25,7 @@ import cifar_models.dctb as models
 # import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
 # import torchvision.models as models
 
-from timer import global_timer
+# from timer import global_timer
 from conf import config, QuantizationConfig
 # import actnn
 
@@ -269,8 +269,8 @@ def main_worker(gpu, ngpus_per_node, args):
                              (0.2673342858792401, 0.2564384629170883, 0.27615047132568404))
     ])
 
-    train_dataset = datasets.CIFAR100(root='./data', train=True, download=True, transform=transform_train)
-    val_dataset = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_val)
+    train_dataset = datasets.CIFAR100(root='../../fdq/data', train=True, download=True, transform=transform_train)
+    val_dataset = datasets.CIFAR100(root='../../fdq/data', train=False, download=True, transform=transform_val)
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)

@@ -9,7 +9,6 @@ import time
 
 from utils.actnn_utils import *
 # from utils.fdmp_utils import *
-from timer import global_timer
 
 from fdmp import FDMP, WDCT
 from conf import config, QuantizationConfig
