@@ -1,4 +1,4 @@
-import numpy as np
+# import numpy as np
 import torch
 from torch.autograd.function import Function
 import torch.nn.functional as F
@@ -25,7 +25,7 @@ class fdmp_linear(Function):
     @staticmethod
     def forward(ctx, input, weight, bias=None):
 
-        feature_pack = FDMP.fdmp(input, WDCT.dct_1d, config.conv_window_size, weight.device)
+        feature_pack = FDMP.fdmp(1, input, WDCT.dct_1d, config.conv_window_size, weight.device)
 
         empty_cache(config.empty_cache_threshold)
 
@@ -43,7 +43,7 @@ class fdmp_linear(Function):
         feature_pack, weight, bias = ctx.saved
         input_shape = ctx.other_args
 
-        input = FDMP.de_fdmp(feature_pack, WDCT.dct_1d, input_shape, config.conv_window_size, weight.device)
+        input = FDMP.de_fdmp(1, feature_pack, WDCT.dct_1d, input_shape, config.conv_window_size, weight.device)
         del feature_pack, ctx.saved
 
         empty_cache(config.empty_cache_threshold)
@@ -80,7 +80,7 @@ class fdmp_convnd(Function):
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[1]
         #     return F.conv2d(input, weight, bias, stride, padding, dilation, groups)
 
-        feature_pack = FDMP.fdmp(input, dct_op, config.conv_window_size, weight.device)
+        feature_pack = FDMP.fdmp(n, input, dct_op, config.conv_window_size, weight.device)
 
         ## Save variable for backward
         # ctx.scheme = scheme
@@ -112,7 +112,7 @@ class fdmp_convnd(Function):
 
         feature_pack, weight, bias = ctx.saved
         # idct_api = WDCT.idct_1d if n == 1 else WDCT.idct_2d
-        input = FDMP.de_fdmp(feature_pack, dct_op, input_shape, config.conv_window_size, weight.device)
+        input = FDMP.de_fdmp(n, feature_pack, dct_op, input_shape, config.conv_window_size, weight.device)
 
         del feature_pack, ctx.saved
         empty_cache(config.empty_cache_threshold)
@@ -203,13 +203,13 @@ class fdmp_conv3d(Function):
 
 class fdmp_batch_norm_nd(Function):
     @staticmethod
-    def run_forward(dct_op, ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
+    def run_forward(n, dct_op, ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
         # if not ctx.needs_input_grad[3]:
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[4]
         #     return ext_backward_func.cudnn_batch_norm(
         #         input, weight, bias, running_mean, running_var, training, exponential_average_factor, eps)[0]
 
-        feature_pack = FDMP.fdmp(input, dct_op, config.bn_window_size, weight.device)
+        feature_pack = FDMP.fdmp(n, input, dct_op, config.bn_window_size, weight.device)
 
         empty_cache(config.empty_cache_threshold)
 
@@ -237,7 +237,7 @@ class fdmp_batch_norm_nd(Function):
         return output
 
     @staticmethod
-    def run_backward(dct_op, ctx, grad_output):
+    def run_backward(n, dct_op, ctx, grad_output):
         # if not ctx.needs_input_grad[3]:
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[4]
         #     return None, None, None, None, None, None, None, None, None
@@ -245,7 +245,7 @@ class fdmp_batch_norm_nd(Function):
         feature_pack, weight, running_mean, running_var, save_mean, save_var, training, eps, reserve = ctx.saved
         input_shape = ctx.other_args
 
-        input = FDMP.de_fdmp(feature_pack, dct_op, input_shape, config.bn_window_size, weight.device)
+        input = FDMP.de_fdmp(n, feature_pack, dct_op, input_shape, config.bn_window_size, weight.device)
 
         del feature_pack, ctx.saved
         empty_cache(config.empty_cache_threshold)
@@ -276,41 +276,41 @@ class fdmp_batch_norm_nd(Function):
 class fdmp_batch_norm1d(Function):
     @staticmethod
     def forward(ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
-        return fdmp_batch_norm_nd.run_forward(WDCT.dct_1d, ctx, input, running_mean, running_var, weight, bias,
+        return fdmp_batch_norm_nd.run_forward(1, WDCT.dct_1d, ctx, input, running_mean, running_var, weight, bias,
                                               training, exponential_average_factor, eps)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_batch_norm_nd.run_backward(WDCT.dct_1d, ctx, grad_output)
+        return fdmp_batch_norm_nd.run_backward(1, WDCT.dct_1d, ctx, grad_output)
 
 
 class fdmp_batch_norm2d(Function):
     @staticmethod
     def forward(ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
-        return fdmp_batch_norm_nd.run_forward(WDCT.dct_2d, ctx, input, running_mean, running_var, weight, bias,
+        return fdmp_batch_norm_nd.run_forward(2, WDCT.dct_2d, ctx, input, running_mean, running_var, weight, bias,
                                               training, exponential_average_factor, eps)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_batch_norm_nd.run_backward(WDCT.dct_2d, ctx, grad_output)
+        return fdmp_batch_norm_nd.run_backward(2, WDCT.dct_2d, ctx, grad_output)
 
 
 class fdmp_batch_norm3d(Function):
     @staticmethod
     def forward(ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
-        return fdmp_batch_norm_nd.run_forward(WDCT.dct_3d, ctx, input, running_mean, running_var, weight, bias,
+        return fdmp_batch_norm_nd.run_forward(3, WDCT.dct_3d, ctx, input, running_mean, running_var, weight, bias,
                                               training, exponential_average_factor, eps)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_batch_norm_nd.run_backward(WDCT.dct_3d, ctx, grad_output)
+        return fdmp_batch_norm_nd.run_backward(3, WDCT.dct_3d, ctx, grad_output)
 
 
 class fdmp_conv_transposend(Function):
     @staticmethod
     def run_forward(n, forward_op, dct_op, ctx, input, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1, dilation=1):
 
-        feature_pack = FDMP.fdmp(input, dct_op, config.conv_window_size, weight.device)
+        feature_pack = FDMP.fdmp(n, input, dct_op, config.conv_window_size, weight.device)
 
         # ctx.scheme = scheme
         ctx.saved = feature_pack, weight, bias
@@ -341,7 +341,7 @@ class fdmp_conv_transposend(Function):
 
         feature_pack, weight, bias = ctx.saved
         # idct_api = WDCT.idct_1d if n == 1 else WDCT.idct_2d
-        input = FDMP.de_fdmp(feature_pack, dct_op, input_shape, config.conv_window_size, weight.device)
+        input = FDMP.de_fdmp(n, feature_pack, dct_op, input_shape, config.conv_window_size, weight.device)
 
         del feature_pack, ctx.saved
 

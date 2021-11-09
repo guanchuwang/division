@@ -6,6 +6,7 @@ import time
 import warnings
 import builtins
 import torch
+# import numpy as np
 
 import torch.nn as nn
 import torch.nn.parallel
@@ -71,7 +72,7 @@ parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
                     help='url used to set up distributed training')
 parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
-parser.add_argument('--seed', default=None, type=int,
+parser.add_argument('--seed', default=7, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
@@ -115,7 +116,9 @@ def main():
 
     if args.seed is not None:
         random.seed(args.seed)
+        # np.random.seed(args.seed) # slow
         torch.manual_seed(args.seed)
+        # torch.cuda.manual_seed_all(args.seed) # slow
         cudnn.deterministic = True
         warnings.warn('You have chosen to seed training. '
                       'This will turn on the CUDNN deterministic setting, '
@@ -171,10 +174,10 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True) # , num_classes=args.num_class)
+        model = models.__dict__[args.arch](pretrained=True, num_classes=args.num_class)
     else:
         print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]() # num_classes=args.num_class)
+        model = models.__dict__[args.arch](num_classes=args.num_class)
 
 
     model = FDMP_Module(model)

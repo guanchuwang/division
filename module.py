@@ -21,8 +21,9 @@ class FDMP_Module(nn.Module):
     def __init__(self, model):
         super(FDMP_Module, self).__init__()
         self.model = model
+        # if config.conv_window_size < 1 or config.bn_window_size < 1:
         FDMP_Module.convert_layers(self.model)
-        FDMP_Module.restore_layers(self.model) # restore the last linear layer
+        # FDMP_Module.restore_layers(self.model) # restore the last linear layer
         print(self.model)
         # hegsns
 
@@ -49,7 +50,7 @@ class FDMP_Module(nn.Module):
                                                   child.groups, child.bias is not None, child.padding_mode))
                 FDMP_Module.layer_num += 1
 
-            elif isinstance(child, nn.Conv2d):
+            if isinstance(child, nn.Conv2d):
                 setattr(module, name, FDMP_Conv2d(child.in_channels, child.out_channels,
                                                   child.kernel_size, child.stride, child.padding, child.dilation,
                                                   child.groups, child.bias is not None, child.padding_mode))
@@ -112,12 +113,13 @@ class FDMP_Module(nn.Module):
                                                  child.ceil_mode, child.count_include_pad, child.divisor_override))
                 FDMP_Module.layer_num += 1
 
-            elif isinstance(child, nn.Linear):
-                setattr(module, name, FDMP_Linear(child.in_features, child.out_features,
-                                                  child.bias is not None))
-                FDMP_Module.layer_num += 1
+            # elif isinstance(child, nn.Linear):
+            #     setattr(module, name, FDMP_Linear(child.in_features, child.out_features,
+            #                                       child.bias is not None))
+            #     FDMP_Module.layer_num += 1
 
-            FDMP_Module.convert_layers(child)
+            else:
+                FDMP_Module.convert_layers(child)
 
     @staticmethod
     def restore_layers(module):
