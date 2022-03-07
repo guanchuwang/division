@@ -12,6 +12,11 @@ import cpp_extension.minimax as ext_minimax
 from conf import config
 import time
 
+from utils.actnn_utils import *
+
+total_act_mem = 0
+total_act_mem_lfc = 0 # torch.tensor(0).type(torch.long)
+total_act_mem_hfc = 0 # torch.tensor(0).type(torch.long)
 
 @torch.no_grad()
 def abs_window_size(N, window_size):
@@ -19,7 +24,6 @@ def abs_window_size(N, window_size):
         return round(window_size*N + 0.5)
     else:
         return round(window_size*N)
-
 
 class FDMP_(Function):
 
@@ -55,6 +59,10 @@ class FDMP_(Function):
             pack_func = ext_quantization.pack_single_precision
         else:
             pack_func = ext_quantization.pack_mixed_precision
+
+        # print(pack_func)
+        # print(bits)
+
         output, scale = pack_func(data, mn, mx, bits, True)
 
         return output, scale
@@ -95,6 +103,7 @@ class FDMP_(Function):
         x_lfc_dct = dct_op(dct_matrix, x)
         x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
 
+        # print(N, n)
         # print(dct_matrix.dtype)
         # print(x.dtype)
         # print(x_lfc_dct.dtype)
@@ -114,7 +123,13 @@ class FDMP_(Function):
         if config.simulate:
             return FDMP.fdmp_simulation(x, dct_op, window_size, device)
 
-        x_lfc_dct, x_lfc, x_hfc = FDMP.freq_divide(x, dct_op, window_size, device)
+        if window_size <= 0:
+            x_lfc_dct, x_lfc, x_hfc = None, None, x
+        else:
+            x_lfc_dct, x_lfc, x_hfc = FDMP.freq_divide(x, dct_op, window_size, device)
+
+        if config.non_quant:
+            return x_lfc_dct, x_hfc, None, None, None
 
         # t0 = time.time()
         featuremap_area = x_hfc.shape[-n:].numel()
@@ -130,7 +145,9 @@ class FDMP_(Function):
             mx = x_hfc_groups.max(dim=-1)[0].unsqueeze(dim=-1)
 
         # print(x_hfc.shape, x_hfc_groups.shape, q_bits, q_min.shape, mx.shape)
-        # hegsns
+        # print(x_hfc.dtype, x_hfc_groups.dtype, q_min.dtype, mx.dtype)
+        # print(x_hfc.device, x_hfc_groups.device)
+        # print(q_bits)
 
         q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
 
@@ -147,31 +164,41 @@ class FDMP_(Function):
         if config.simulate:
             return FDMP.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
 
-        x_lfc_dct, q_input, q_bits, q_scale, q_min = feature_pack
+        if config.non_quant:
 
-        # Estimate valid group size
-        featuremap_area = q_input_shape[-n:].numel()
-        group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
-        x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min, group_size)
+            x_lfc_dct, x_hfc, _, _, _ = feature_pack
+            N = q_input_shape[-1]
+            n = abs_window_size(N, window_size)
+            dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+            x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+            return x_lfc + x_hfc
 
-        # Remove padding
-        num_features = q_input_shape[1:].numel()
-        x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
-        x_hfc_dequant = x_hfc_dequant.view(*q_input_shape).contiguous()
+        else:
 
-        if window_size <= 0:
-            return x_hfc_dequant
+            x_lfc_dct, q_input, q_bits, q_scale, q_min = feature_pack
 
-        # print(x_lfc_dct.shape)
-        N = q_input_shape[-1]
-        n = abs_window_size(N, window_size)
-        dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+            # Estimate valid group size
+            featuremap_area = q_input_shape[-n:].numel()
+            group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
+            x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min, group_size)
 
-        x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
-        x = x_lfc + x_hfc_dequant
+            # Remove padding
+            num_features = q_input_shape[1:].numel()
+            x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
+            x_hfc_dequant = x_hfc_dequant.view(*q_input_shape).contiguous()
 
-        return x
-        # return x.to(torch.float)
+            if window_size <= 0:
+                return x_hfc_dequant
+
+            # IDCT of LFC
+            N = q_input_shape[-1]
+            n = abs_window_size(N, window_size)
+            dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+
+            x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+            x = x_lfc + x_hfc_dequant
+
+            return x
 
     @staticmethod
     @torch.no_grad()
@@ -184,6 +211,28 @@ class FDMP_(Function):
         x_reference = x_min_group  # + quant_step/2
         x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step).type(torch.int)
         x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
+
+        if config.debug_fd_memory:
+
+            global total_act_mem_lfc, total_act_mem_hfc, total_act_mem
+
+            act_mem = compute_tensor_bytes(x) # /(1024 ** 2)
+            act_mem_lfc = compute_tensor_bytes(x_lfc_dct) # /(1024 ** 2)
+            act_mem_hfc = act_mem - act_mem_lfc
+
+            if x.shape[1] == 3: # first layer
+
+                total_act_mem = 0
+                total_act_mem_lfc = 0
+                total_act_mem_hfc = 0
+
+            total_act_mem += act_mem
+            total_act_mem_lfc += act_mem_lfc
+            total_act_mem_hfc += act_mem_hfc
+
+            print("Forward Act mem: {} B".format(total_act_mem))
+            print("Forward Act mem LFC: {} B".format(total_act_mem_lfc))
+            print("Forward Act mem HFC: {} B".format(total_act_mem_hfc))
 
         # print(x_lfc_dct.shape)
 
@@ -204,7 +253,8 @@ class FDMP_(Function):
         dct_matrix = WDCT.generate_dct_matrix(N, n, device)
 
         x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
-        x = x_lfc + x_hfc_dequant
+
+        x = (not config.rm_lfc) * x_lfc + (not config.rm_hfc) * x_hfc_dequant
 
         return x
 

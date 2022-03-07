@@ -56,12 +56,19 @@ class QuantizationConfig:
         self.hfc_bit_num = 2
         self.round_window = True
         self.half_precision = False
+        self.num_classes = 1000
+        self.non_quant = False
+
+        # Ablation study
+        self.lfc_flag = True
+        self.hfc_flag = True
 
         # Memory management flag
         self.empty_cache_threshold = None
         self.pipeline_threshold = None
         self.cudnn_benchmark_conv2d = True
         self.swap = False
+        self.vanilla = False
 
         # Debug related flag
         self.debug_memory_model = ast.literal_eval(os.environ.get('DEBUG_MEM', "False"))
@@ -70,6 +77,7 @@ class QuantizationConfig:
         self.debug_memory_op_backward = False # True #
         self.debug_remove_bn = False
         self.debug_remove_relu = False
+        self.debug_fd_memory = False
 
     def __str__(self):
         return json.dumps(self.__dict__)

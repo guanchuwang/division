@@ -8,7 +8,6 @@ from conf import config
 import time
 
 from utils.actnn_utils import *
-# from utils.fdmp_utils import *
 
 from fdmp import FDMP, WDCT
 from conf import config, QuantizationConfig
@@ -95,6 +94,12 @@ class fdmp_convnd(Function):
             conv2d_layer_ct += 1
             total_act_mem += compute_tensor_bytes(feature_pack)
             print("Act mem: %.2f MB" % (total_act_mem / 1024 ** 2))
+
+        # print(input.dtype, weight.dtype)
+        # print(input.device, weight.device)
+        # print(bias, stride, padding, dilation, groups)
+        # import pdb
+        # pdb.set_trace()
 
         return forward_op(input, weight, bias, stride, padding, dilation, groups)
 

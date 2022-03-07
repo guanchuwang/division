@@ -1,0 +1,3 @@
+python main_imagenet.py --gpu_device 2 3 --dist-url 'tcp://localhost:10004' --dist-backend nccl --multiprocessing-distributed --world-size 1 --rank 0 --epoch 200 --lr 0.1 --wd 1e-4 --arch mobilenet_v2 --lmdb_dataset --vanilla -hf --seed 0 2>&1 | tee mobilenet_imagenet_baseline_lr_01_wd_0001.log
+
+python main_imagenet.py --gpu_device 0 1 --dist-url 'tcp://localhost:10002' --dist-backend nccl --multiprocessing-distributed --world-size 1 --rank 0 --epoch 200 --lr 0.05 --wd 4e-5 --arch mobilenet_v2 --lmdb_dataset --vanilla -hf --seed 0 2>&1 | tee mobilenet_imagenet_baseline_lr_005_wd_00004.log

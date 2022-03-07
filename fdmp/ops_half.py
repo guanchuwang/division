@@ -8,7 +8,6 @@ from conf import config
 import time
 
 from utils.actnn_utils import *
-# from utils.fdmp_utils import *
 
 from ops import fdmp_linear
 from ops import fdmp_conv2d, fdmp_conv1d

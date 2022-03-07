@@ -5,22 +5,32 @@ import shutil
 import time
 import warnings
 import builtins
-
 import torch
+# import numpy as np
+
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.optim
+
+import sys
+sys.path.append("./fdmp")
+# print(sys.path)
+
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+import cifar_models as models
+
+# import cifar_models.dctb as models
 # import torchvision.models as models
 # import cnn_models as models
-import cifar_models.dctb as models
-from module import MDCT_Module
+# from module import MDCT_Module
+from conf import config, QuantizationConfig
+
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -80,12 +90,38 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
 parser.add_argument("--conv_window_size", type=float, default=1, help="")
 parser.add_argument("--bn_window_size", type=float, default=1, help="")
-parser.add_argument("--hfc_bit_num", type=float, default=1, help="")
-parser.add_argument("--barrier_num", type=int, default=8, help="")
-parser.add_argument("--max_search_time", type=int, default=8, help="")
-parser.add_argument("--min_window_size", type=int, default=0, help="")
+parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--opt", type=str, default="SGD", help="")
 parser.add_argument("--save_period", type=int, default=10, help="")
+parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
+parser.add_argument("--group_size", type=int, default=256, help="")
+parser.add_argument("--non_round_window", action="store_false", help="")
+parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument("--rm_lfc", action="store_true")
+parser.add_argument("--rm_hfc", action="store_true")
+parser.add_argument("--num_classes", type=int, default=1000, help="")
+parser.add_argument("--debug_fd_memory", action="store_true")
+parser.add_argument("--vanilla", action="store_true")
+
+args_fdmp = parser.parse_args()
+config.conv_window_size = args_fdmp.conv_window_size
+config.simulate = args_fdmp.simulate
+config.group_size = args_fdmp.group_size
+config.conv_window_size = args_fdmp.conv_window_size
+config.bn_window_size = args_fdmp.bn_window_size
+config.hfc_bit_num = args_fdmp.hfc_bit_num
+config.round_window = args_fdmp.non_round_window
+config.half_precision = args_fdmp.half_precision
+config.rm_lfc = args_fdmp.rm_lfc
+config.rm_hfc = args_fdmp.rm_hfc
+config.num_classes = args_fdmp.num_classes
+config.debug_fd_memory = args_fdmp.debug_fd_memory
+config.vanilla = args_fdmp.vanilla
+os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+
+
+from module import FDMP_Module
+from torch.cuda.amp import autocast as autocast, GradScaler
 
 
 best_acc1 = 0
@@ -153,15 +189,16 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True)
+        model = models.__dict__[args.arch](pretrained=True, num_classes=config.num_classes)
     else:
         print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]()
+        model = models.__dict__[args.arch](num_classes=config.num_classes)
 
-
-    model = MDCT_Module(model)
-    MDCT_Module.update_conv_window_size(model, window_size=args.conv_window_size, hfc_bit_num=args.hfc_bit_num, barrier_num=args.barrier_num, max_search_time=args.max_search_time, min_window_size=args.min_window_size)
-    MDCT_Module.update_bn_window_size(model, window_size=args.bn_window_size, hfc_bit_num=args.hfc_bit_num, barrier_num=args.barrier_num, max_search_time=args.max_search_time, min_window_size=args.min_window_size)
+    ##########################
+    if config.vanilla:
+        print(model)
+    else:
+        model = FDMP_Module(model)
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -205,6 +242,7 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         raise TypeError("Invalid optimizer")
 
+    ### Should be remove!!!
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     # optionally resume from a checkpoint
@@ -247,8 +285,8 @@ def main_worker(gpu, ngpus_per_node, args):
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]), # cifar100
     ])
 
-    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-    val_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_val)
+    train_dataset = datasets.CIFAR10(root='../../data', train=True, download=True, transform=transform_train)
+    val_dataset = datasets.CIFAR10(root='../../data', train=False, download=True, transform=transform_val)
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -294,6 +332,7 @@ def main_worker(gpu, ngpus_per_node, args):
         #         'optimizer' : optimizer.state_dict(),
         #     }, is_best, checkpoint_dir_name, 'checkpoint_' + str(epoch+1) + '.pth.tar')
 
+        ### We already have adjust_learning_rate!!! This should be removed!!!
         scheduler.step()
 
 
@@ -303,27 +342,53 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
+    throughput = AverageMeter('Throughput', ':6.2f')
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
+        [batch_time, throughput, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()
 
-    end = time.time()
+    # end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
-        data_time.update(time.time() - end)
+        torch.cuda.synchronize()
+        batch_start_time = time.time()
+        # data_time.update(time.time() - end)
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
         if torch.cuda.is_available():
             target = target.cuda(args.gpu, non_blocking=True)
 
-        # compute output
-        output = model(images) # , window_size=args.window_size)
-        loss = criterion(output, target)
+        # batch_update_start_time = time.time()
+
+        # output = model(images)
+        # loss = criterion(output, target)
+        # hegsns
+
+        # amp
+        if not config.half_precision:
+            output = model(images)
+            loss = criterion(output, target)
+        else:
+            with autocast():
+                output = model(images)
+                loss = criterion(output, target)
+
+        # # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # grad_scaler.scale(loss).backward()
+        # grad_scaler.step(optimizer)
+        # grad_scaler.update()
+
+        torch.cuda.synchronize()
+        batch_update_end_time = time.time()
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
@@ -331,14 +396,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
         # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+        batch_time.update(batch_update_end_time - batch_start_time)
+        throughput.update(args.batch_size/(batch_update_end_time - batch_start_time))
+        # end = time.time()
 
         if i % args.print_freq == 0:
             progress.display(i)

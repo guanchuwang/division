@@ -5,43 +5,41 @@ import shutil
 import time
 import warnings
 import builtins
-import torch
-# import numpy as np
+from enum import Enum
 
+import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.optim
-
-import sys
-sys.path.append("./fdmp")
-print(sys.path)
-
 import torch.multiprocessing as mp
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import cifar_models as models
+import torchvision.models as models
 
-# import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
-# import torchvision.models as models
+from utils.folder2lmdb import ImageFolderLMDB
 
-# from timer import global_timer
+import sys
+sys.path.append("./fdmp")
+# print(sys.path)
 from conf import config, QuantizationConfig
-# import actnn
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
 
-parser = argparse.ArgumentParser(description='MDCT cifar100')
-# parser.add_argument('data', metavar='DIR', help='path to dataset')
-parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
-                    choices=model_names, help='model architecture: ' + ' | '.join(model_names) +
-                        ' (default: resnet56)')
-parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+# parser.add_argument('data', metavar='DIR', default='/home/gw22/data/ImageNet/',
+#                     help='path to dataset')
+parser.add_argument('-a', '--arch', metavar='ARCH', default='densenet121',
+                    choices=model_names,
+                    help='model architecture: ' +
+                        ' | '.join(model_names) +
+                        ' (default: resnet18)')
+parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -56,7 +54,7 @@ parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
-parser.add_argument('--wd', '--weight-decay', default=5e-4, type=float,
+parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
 parser.add_argument('-p', '--print-freq', default=10, type=int,
@@ -75,7 +73,7 @@ parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
                     help='url used to set up distributed training')
 parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
-parser.add_argument('--seed', default=7, type=int,
+parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
@@ -88,18 +86,20 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
 parser.add_argument("--conv_window_size", type=float, default=1, help="")
 parser.add_argument("--bn_window_size", type=float, default=1, help="")
-parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
-parser.add_argument("--opt", type=str, default="SGD", help="")
+parser.add_argument("--hfc_bit_num", type=int, default=1, help="")
+# parser.add_argument("--opt", type=str, default="SGD", help="")
 parser.add_argument("--save_period", type=int, default=10, help="")
 parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
 parser.add_argument("--group_size", type=int, default=256, help="")
-parser.add_argument("--round_window", type=bool, default=True, help="")
+parser.add_argument("--non_round_window", action="store_false", help="")
 parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
 parser.add_argument("--rm_lfc", action="store_true")
 parser.add_argument("--rm_hfc", action="store_true")
 parser.add_argument("--num_classes", type=int, default=1000, help="")
 parser.add_argument("--debug_fd_memory", action="store_true")
 parser.add_argument("--vanilla", action="store_true")
+parser.add_argument("--lmdb_dataset", action="store_true")
+parser.add_argument("--non_quant", action="store_true")
 
 args_fdmp = parser.parse_args()
 config.conv_window_size = args_fdmp.conv_window_size
@@ -108,14 +108,15 @@ config.group_size = args_fdmp.group_size
 config.conv_window_size = args_fdmp.conv_window_size
 config.bn_window_size = args_fdmp.bn_window_size
 config.hfc_bit_num = args_fdmp.hfc_bit_num
-config.round_window = args_fdmp.round_window
+config.round_window = args_fdmp.non_round_window
 config.half_precision = args_fdmp.half_precision
 config.rm_lfc = args_fdmp.rm_lfc
 config.rm_hfc = args_fdmp.rm_hfc
 config.num_classes = args_fdmp.num_classes
 config.debug_fd_memory = args_fdmp.debug_fd_memory
-config.vanilla = args_fdmp.vanilla
+config.non_quant = args_fdmp.non_quant
 os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+
 
 from module import FDMP_Module
 from torch.cuda.amp import autocast as autocast, GradScaler
@@ -128,9 +129,7 @@ def main():
 
     if args.seed is not None:
         random.seed(args.seed)
-        # np.random.seed(args.seed) # slow
         torch.manual_seed(args.seed)
-        # torch.cuda.manual_seed_all(args.seed) # slow
         cudnn.deterministic = True
         warnings.warn('You have chosen to seed training. '
                       'This will turn on the CUDNN deterministic setting, '
@@ -148,7 +147,6 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
-
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -162,6 +160,7 @@ def main():
 
 
 def main_worker(gpu, ngpus_per_node, args):
+
     global best_acc1
     args.gpu = gpu
 
@@ -183,6 +182,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.rank = args.rank * ngpus_per_node + gpu
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
+
     # create model
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
@@ -192,7 +192,7 @@ def main_worker(gpu, ngpus_per_node, args):
         model = models.__dict__[args.arch](num_classes=config.num_classes)
 
     ##########################
-    if config.vanilla:
+    if args.vanilla:
         print(model)
     else:
         model = FDMP_Module(model)
@@ -213,7 +213,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         else:
-            model.cuda(args.gpu)
+            model.cuda()
             # DistributedDataParallel will divide and allocate batch_size to all
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
@@ -230,17 +230,10 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
-    if args.opt == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
-    elif args.opt == "Adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    else:
-        raise TypeError("Invalid optimizer")
-
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 120, 160], gamma=0.2)  # learning rate decay
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -266,42 +259,11 @@ def main_worker(gpu, ngpus_per_node, args):
 
     cudnn.benchmark = True
 
-    # Data loading code
+    # import pdb
+    # pdb.set_trace()
 
-    transform_train = transforms.Compose([
-        #transforms.ToPILImage(),
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(15),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5070751592371323, 0.48654887331495095, 0.4409178433670343),
-                             (0.2673342858792401, 0.2564384629170883, 0.27615047132568404))
-    ])
-
-    transform_val = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5070751592371323, 0.48654887331495095, 0.4409178433670343),
-                             (0.2673342858792401, 0.2564384629170883, 0.27615047132568404))
-    ])
-
-    train_dataset = datasets.CIFAR100(root='../../data', train=True, download=True, transform=transform_train)
-    val_dataset = datasets.CIFAR100(root='../../data', train=False, download=True, transform=transform_val)
-
-    if args.distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    else:
-        train_sampler = None
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-
-    val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
-
-    # warmup_scheduler = WarmUpLR(optimizer, len(train_loader))
-    # grad_scaler = GradScaler()
+    # initialize the data_loader
+    train_loader, val_loader, train_sampler = dataloader_init(args)
 
     if args.evaluate:
         validate(val_loader, model, criterion, args)
@@ -310,7 +272,8 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, epoch, args)
+
+        adjust_learning_rate(optimizer, epoch, args) # Use cos scheduler instead
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
@@ -322,20 +285,113 @@ def main_worker(gpu, ngpus_per_node, args):
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
 
-        # if (not args.multiprocessing_distributed or (args.multiprocessing_distributed
-        #         and args.rank % ngpus_per_node == 0)) and (epoch+1) % args.save_period == 0:
-        #     checkpoint_dir_name = "dctfb_convwin_" + str(args.conv_window_size) + "_bnwin_" + \
-        #                             str(args.bn_window_size) + "_checkpoint"
-        #     save_checkpoint({
-        #         'epoch': epoch + 1,
-        #         'arch': args.arch,
-        #         'state_dict': model.state_dict(),
-        #         'best_acc1': best_acc1,
-        #         'optimizer' : optimizer.state_dict(),
-        #     }, is_best, checkpoint_dir_name, 'checkpoint_' + str(epoch+1) + '.pth.tar')
+        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                and args.rank % ngpus_per_node == 0):
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'best_acc1': best_acc1,
+                'optimizer' : optimizer.state_dict(),
+            }, is_best)
 
-        ### We already have adjust_learning_rate!!! This should be removed!!!
-        scheduler.step()
+
+
+def dataloader_init(args):
+    # Data loading code
+
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+
+    # print(args.lmdb_dataset)
+    # print(args.distributed and args.lmdb_dataset)
+
+    if args.distributed and args.lmdb_dataset:
+
+        print("Load LMDB dataset.")
+
+        # hegsns
+
+        traindir_lmdb = '/home/gw22/data/ImageNet/train.lmdb'
+        valdir_lmdb = '/home/gw22/data/ImageNet/val.lmdb'
+        train_data_num = len(datasets.ImageFolder('/home/gw22/data/ImageNet/train'))
+        val_data_num = len(datasets.ImageFolder('/home/gw22/data/ImageNet/val'))
+
+        train_dataset_lmdb = ImageFolderLMDB(
+            traindir_lmdb,
+            train_data_num,
+            transforms.Compose([
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ])
+        )
+        val_dataset_lmdb = ImageFolderLMDB(
+            valdir_lmdb,
+            val_data_num,
+            transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset_lmdb)
+
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset_lmdb, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset_lmdb, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True, drop_last=False)
+
+        return train_loader, val_loader, train_sampler
+
+    else:
+
+        traindir = '/home/gw22/data/ImageNet/train'  # os.path.join(args.data, 'train')
+        valdir = '/home/gw22/data/ImageNet/val'  # os.path.join(args.data, 'val')
+
+        train_dataset = datasets.ImageFolder(
+            traindir,
+            transforms.Compose([
+                transforms.RandomResizedCrop(224),  # Why we need RandomResizedCrop???
+                transforms.RandomHorizontalFlip(),  # Why we need RandomHorizontalFlip???
+                transforms.ToTensor(),
+                normalize,
+            ]))
+
+        val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+
+        if args.distributed:
+
+            train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+            train_loader = torch.utils.data.DataLoader(
+                train_dataset, batch_size=args.batch_size, shuffle=False,
+                num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset, batch_size=args.batch_size, shuffle=False,
+                num_workers=args.workers, pin_memory=True, drop_last=False)
+
+            return train_loader, val_loader, train_sampler
+
+        else:
+
+            train_loader = torch.utils.data.DataLoader(
+                train_dataset, batch_size=args.batch_size, shuffle=True,
+                num_workers=args.workers, pin_memory=True)
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset, batch_size=args.batch_size, shuffle=False,
+                num_workers=args.workers, pin_memory=True, drop_last=False)
+
+            return train_loader, val_loader, None
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -345,6 +401,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
     throughput = AverageMeter('Throughput', ':6.2f')
+
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, throughput, losses, top1, top5],
@@ -356,6 +413,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     # end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
+        # measure data loading time
         torch.cuda.synchronize()
         batch_start_time = time.time()
         # data_time.update(time.time() - end)
@@ -365,11 +423,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         if torch.cuda.is_available():
             target = target.cuda(args.gpu, non_blocking=True)
 
-        # batch_update_start_time = time.time()
-
+        # # compute output
         # output = model(images)
         # loss = criterion(output, target)
-        # hegsns
 
         # amp
         if not config.half_precision:
@@ -380,27 +436,23 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
                 output = model(images)
                 loss = criterion(output, target)
 
-        # # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        # grad_scaler.scale(loss).backward()
-        # grad_scaler.step(optimizer)
-        # grad_scaler.update()
-
-        torch.cuda.synchronize()
-        batch_update_end_time = time.time()
-
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
 
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        torch.cuda.synchronize()
+        batch_update_end_time = time.time()
+
         # measure elapsed time
         batch_time.update(batch_update_end_time - batch_start_time)
-        throughput.update(args.batch_size/(batch_update_end_time - batch_start_time))
+        throughput.update(args.batch_size / (batch_update_end_time - batch_start_time))
         # end = time.time()
 
         if i % args.print_freq == 0:
@@ -408,12 +460,13 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
 
 def validate(val_loader, model, criterion, args):
-    batch_time = AverageMeter('Time', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    batch_time = AverageMeter('Time', ':6.3f', Summary.NONE)
+    losses = AverageMeter('Loss', ':.4e', Summary.NONE)
+    top1 = AverageMeter('Acc@1', ':6.2f', Summary.AVERAGE)
+    top5 = AverageMeter('Acc@5', ':6.2f', Summary.AVERAGE)
+
     progress = ProgressMeter(
-        len(val_loader),
+        0, # len(val_loader)
         [batch_time, losses, top1, top5],
         prefix='Test: ')
 
@@ -429,9 +482,8 @@ def validate(val_loader, model, criterion, args):
                 target = target.cuda(args.gpu, non_blocking=True)
 
             # compute output
-            output = model(images) # , window_size=args.window_size)
+            output = model(images)
             loss = criterion(output, target)
-            # hegsns
 
             # measure accuracy and record loss
             acc1, acc5 = accuracy(output, target, topk=(1, 5))
@@ -446,25 +498,28 @@ def validate(val_loader, model, criterion, args):
             if i % args.print_freq == 0:
                 progress.display(i)
 
-        # TODO: this should also be done with the ProgressMeter
-        print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
+        progress.display_summary()
 
     return top1.avg
 
 
-def save_checkpoint(state, is_best, dir='./', filename='checkpoint.pth.tar'):
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-    torch.save(state, os.path.join(dir, filename))
+def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    torch.save(state, filename)
     if is_best:
-        shutil.copyfile(os.path.join(dir, filename), os.path.join(dir, 'model_best.pth.tar'))
+        shutil.copyfile(filename, 'model_best.pth.tar')
+
+class Summary(Enum):
+    NONE = 0
+    AVERAGE = 1
+    SUM = 2
+    COUNT = 3
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
-    def __init__(self, name, fmt=':f'):
+    def __init__(self, name, fmt=':f', summary_type=Summary.AVERAGE):
         self.name = name
         self.fmt = fmt
+        self.summary_type = summary_type
         self.reset()
 
     def reset(self):
@@ -482,6 +537,21 @@ class AverageMeter(object):
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
+    
+    def summary(self):
+        fmtstr = ''
+        if self.summary_type is Summary.NONE:
+            fmtstr = ''
+        elif self.summary_type is Summary.AVERAGE:
+            fmtstr = '{name} {avg:.3f}'
+        elif self.summary_type is Summary.SUM:
+            fmtstr = '{name} {sum:.3f}'
+        elif self.summary_type is Summary.COUNT:
+            fmtstr = '{name} {count:.3f}'
+        else:
+            raise ValueError('invalid summary type %r' % self.summary_type)
+        
+        return fmtstr.format(**self.__dict__)
 
 
 class ProgressMeter(object):
@@ -494,6 +564,11 @@ class ProgressMeter(object):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
         print('\t'.join(entries))
+        
+    def display_summary(self):
+        entries = [" *"]
+        entries += [meter.summary() for meter in self.meters]
+        print(' '.join(entries))
 
     def _get_batch_fmtstr(self, num_batches):
         num_digits = len(str(num_batches // 1))

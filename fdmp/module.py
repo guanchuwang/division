@@ -108,10 +108,10 @@ class FDMP_Module(nn.Module):
                                                  child.padding, child.dilation, child.return_indices, child.ceil_mode))
                 FDMP_Module.layer_num += 1
 
-            elif isinstance(child, nn.AvgPool2d):
-                setattr(module, name, QAvgPool2d(child.kernel_size, child.stride, child.padding,
-                                                 child.ceil_mode, child.count_include_pad, child.divisor_override))
-                FDMP_Module.layer_num += 1
+            # elif isinstance(child, nn.AvgPool2d):
+            #     setattr(module, name, QAvgPool2d(child.kernel_size, child.stride, child.padding,
+            #                                      child.ceil_mode, child.count_include_pad, child.divisor_override))
+            #     FDMP_Module.layer_num += 1
 
             # elif isinstance(child, nn.Linear):
             #     setattr(module, name, FDMP_Linear(child.in_features, child.out_features,
