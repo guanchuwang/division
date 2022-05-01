@@ -6,6 +6,7 @@ import time
 import warnings
 import builtins
 import torch
+import math
 # import numpy as np
 
 import torch.nn as nn
@@ -45,7 +46,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                         ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=200, type=int, metavar='N',
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -88,37 +89,25 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'multi node data parallel training')
 
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
-parser.add_argument("--conv_window_size", type=float, default=1, help="")
-parser.add_argument("--bn_window_size", type=float, default=1, help="")
-parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
-parser.add_argument("--opt", type=str, default="SGD", help="")
+parser.add_argument("--scheduler", type=str, default="warmup_coslr", help="")
 parser.add_argument("--save_period", type=int, default=10, help="")
-parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
-parser.add_argument("--group_size", type=int, default=256, help="")
-parser.add_argument("--non_round_window", action="store_false", help="")
-parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument("--num_classes", type=int, default=10, help="")
+parser.add_argument("--vanilla", action="store_true")
+parser.add_argument('--gamma', default=0.2, type=float, help='stepLR gamma')
+
+parser.add_argument("--lfc_block", type=int, default=8, help="")
+parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--rm_lfc", action="store_true")
 parser.add_argument("--rm_hfc", action="store_true")
-parser.add_argument("--num_classes", type=int, default=1000, help="")
+parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
+parser.add_argument("--group_size", type=int, default=256, help="")
 parser.add_argument("--debug_fd_memory", action="store_true")
-parser.add_argument("--vanilla", action="store_true")
 
-args_fdmp = parser.parse_args()
-config.conv_window_size = args_fdmp.conv_window_size
-config.simulate = args_fdmp.simulate
-config.group_size = args_fdmp.group_size
-config.conv_window_size = args_fdmp.conv_window_size
-config.bn_window_size = args_fdmp.bn_window_size
-config.hfc_bit_num = args_fdmp.hfc_bit_num
-config.round_window = args_fdmp.non_round_window
-config.half_precision = args_fdmp.half_precision
-config.rm_lfc = args_fdmp.rm_lfc
-config.rm_hfc = args_fdmp.rm_hfc
-config.num_classes = args_fdmp.num_classes
-config.debug_fd_memory = args_fdmp.debug_fd_memory
-config.vanilla = args_fdmp.vanilla
-os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+from conf import config, QuantizationConfig, config_init
 
+args_global = parser.parse_args()
+config_init(args_global)
 
 from module import FDMP_Module
 from torch.cuda.amp import autocast as autocast, GradScaler
@@ -242,8 +231,15 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         raise TypeError("Invalid optimizer")
 
-    ### Should be remove!!!
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+
+    lr_func = lambda epoch: epoch / args.warm_up_epochs if epoch <= args.warm_up_epochs else 0.5 * 1 * (
+            math.cos(
+                (epoch - args.warm_up_epochs) /
+                (args.epochs - args.warm_up_epochs) * math.pi) + 1)
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_func)
+
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -308,18 +304,21 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, epoch, args)
+        # adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
 
+        scheduler.step()
+        # print(optimizer.param_groups[0]['lr'])
+
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
 
-        # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
-
+        # # remember best acc@1 and save checkpoint
+        # is_best = acc1 > best_acc1
+        # best_acc1 = max(acc1, best_acc1)
+        #
         # if (not args.multiprocessing_distributed or (args.multiprocessing_distributed
         #         and args.rank % ngpus_per_node == 0)) and (epoch+1) % args.save_period == 0:
         #     checkpoint_dir_name = "dctfb_convwin_" + str(args.conv_window_size) + "_bnwin_" + \
@@ -332,8 +331,6 @@ def main_worker(gpu, ngpus_per_node, args):
         #         'optimizer' : optimizer.state_dict(),
         #     }, is_best, checkpoint_dir_name, 'checkpoint_' + str(epoch+1) + '.pth.tar')
 
-        ### We already have adjust_learning_rate!!! This should be removed!!!
-        scheduler.step()
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):

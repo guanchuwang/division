@@ -6,6 +6,7 @@ import time
 import warnings
 import builtins
 import torch
+import math
 # import numpy as np
 
 import torch.nn as nn
@@ -16,7 +17,7 @@ import torch.optim
 
 import sys
 sys.path.append("./fdmp")
-print(sys.path)
+# print(sys.path)
 
 import torch.multiprocessing as mp
 import torch.utils.data
@@ -26,18 +27,13 @@ import torchvision.datasets as datasets
 import cifar_models as models
 
 # import torch.cuda.amp as amp # os.environ["CUDA_VISIBLE_DEVICES"] should before this import command
-# import torchvision.models as models
-
-# from timer import global_timer
-from conf import config, QuantizationConfig
-# import actnn
+# import torchvision.models as models # Default torchvision model is not optimal for the cifar dataset
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='MDCT cifar100')
-# parser.add_argument('data', metavar='DIR', help='path to dataset')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet34',
                     choices=model_names, help='model architecture: ' + ' | '.join(model_names) +
                         ' (default: resnet56)')
@@ -47,7 +43,7 @@ parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -75,7 +71,7 @@ parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
                     help='url used to set up distributed training')
 parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
-parser.add_argument('--seed', default=7, type=int,
+parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
@@ -86,36 +82,25 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'multi node data parallel training')
 
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
-parser.add_argument("--conv_window_size", type=float, default=1, help="")
-parser.add_argument("--bn_window_size", type=float, default=1, help="")
-parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
-parser.add_argument("--opt", type=str, default="SGD", help="")
+parser.add_argument("--scheduler", type=str, default="warmup_coslr", help="")
 parser.add_argument("--save_period", type=int, default=10, help="")
-parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
-parser.add_argument("--group_size", type=int, default=256, help="")
-parser.add_argument("--round_window", type=bool, default=True, help="")
-parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument("--num_classes", type=int, default=100, help="")
+parser.add_argument("--vanilla", action="store_true")
+parser.add_argument('--gamma', default=0.2, type=float, help='stepLR gamma')
+
+parser.add_argument("--lfc_block", type=int, default=8, help="")
+parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--rm_lfc", action="store_true")
 parser.add_argument("--rm_hfc", action="store_true")
-parser.add_argument("--num_classes", type=int, default=1000, help="")
+parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
+parser.add_argument("--group_size", type=int, default=256, help="")
 parser.add_argument("--debug_fd_memory", action="store_true")
-parser.add_argument("--vanilla", action="store_true")
 
-args_fdmp = parser.parse_args()
-config.conv_window_size = args_fdmp.conv_window_size
-config.simulate = args_fdmp.simulate
-config.group_size = args_fdmp.group_size
-config.conv_window_size = args_fdmp.conv_window_size
-config.bn_window_size = args_fdmp.bn_window_size
-config.hfc_bit_num = args_fdmp.hfc_bit_num
-config.round_window = args_fdmp.round_window
-config.half_precision = args_fdmp.half_precision
-config.rm_lfc = args_fdmp.rm_lfc
-config.rm_hfc = args_fdmp.rm_hfc
-config.num_classes = args_fdmp.num_classes
-config.debug_fd_memory = args_fdmp.debug_fd_memory
-config.vanilla = args_fdmp.vanilla
-os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+from conf import config, QuantizationConfig, config_init
+
+args_global = parser.parse_args()
+config_init(args_global)
 
 from module import FDMP_Module
 from torch.cuda.amp import autocast as autocast, GradScaler
@@ -186,13 +171,13 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True, num_classes=config.num_classes)
+        model = models.__dict__[args.arch](pretrained=True, num_classes=args.num_classes)
     else:
         print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](num_classes=config.num_classes)
+        model = models.__dict__[args.arch](num_classes=args.num_classes)
 
     ##########################
-    if config.vanilla:
+    if args.vanilla:
         print(model)
     else:
         model = FDMP_Module(model)
@@ -230,17 +215,25 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
-    if args.opt == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
-    elif args.opt == "Adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    else:
-        raise TypeError("Invalid optimizer")
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 120, 160], gamma=0.2)  # learning rate decay
+    scheduler = scheduler_init(optimizer, args)
+
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+
+    # lr_func = lambda epoch: epoch / args.warm_up_epochs if epoch <= args.warm_up_epochs else 0.5 * 1 * (
+    #         math.cos(
+    #             (epoch - args.warm_up_epochs) /
+    #             (args.epochs - args.warm_up_epochs) * math.pi) + 1)
+    #
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_func)
+
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(
+    #     optimizer, milestones=[30, 60, 80], gamma=0.2)
+    #     # optimizer, milestones=[60, 120, 160], gamma=0.2)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -269,19 +262,20 @@ def main_worker(gpu, ngpus_per_node, args):
     # Data loading code
 
     transform_train = transforms.Compose([
-        #transforms.ToPILImage(),
-        transforms.RandomCrop(32, padding=4),
+        transforms.Pad(4, padding_mode='reflect'),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(15),
+        transforms.RandomCrop(32),
         transforms.ToTensor(),
-        transforms.Normalize((0.5070751592371323, 0.48654887331495095, 0.4409178433670343),
-                             (0.2673342858792401, 0.2564384629170883, 0.27615047132568404))
+        transforms.Normalize(
+            torch.tensor([125.3, 123.0, 113.9]) / 255.0,
+            torch.tensor([63.0, 62.1, 66.7]) / 255.0),
     ])
 
     transform_val = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5070751592371323, 0.48654887331495095, 0.4409178433670343),
-                             (0.2673342858792401, 0.2564384629170883, 0.27615047132568404))
+        transforms.Normalize(
+            torch.tensor([125.3, 123.0, 113.9]) / 255.0,
+            torch.tensor([63.0, 62.1, 66.7]) / 255.0),
     ])
 
     train_dataset = datasets.CIFAR100(root='../../data', train=True, download=True, transform=transform_train)
@@ -310,18 +304,19 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, epoch, args)
+        # adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
+        scheduler.step()
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
 
         # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
-
+        # is_best = acc1 > best_acc1
+        # best_acc1 = max(acc1, best_acc1)
+        #
         # if (not args.multiprocessing_distributed or (args.multiprocessing_distributed
         #         and args.rank % ngpus_per_node == 0)) and (epoch+1) % args.save_period == 0:
         #     checkpoint_dir_name = "dctfb_convwin_" + str(args.conv_window_size) + "_bnwin_" + \
@@ -334,8 +329,29 @@ def main_worker(gpu, ngpus_per_node, args):
         #         'optimizer' : optimizer.state_dict(),
         #     }, is_best, checkpoint_dir_name, 'checkpoint_' + str(epoch+1) + '.pth.tar')
 
-        ### We already have adjust_learning_rate!!! This should be removed!!!
-        scheduler.step()
+def scheduler_init(optimizer, args):
+
+    if args.scheduler == "warmup_coslr":
+
+        warm_up_epochs = 5
+        lr_func = lambda epoch: epoch / warm_up_epochs if epoch <= warm_up_epochs else 0.5 * 1 * (
+                math.cos(
+                    (epoch - warm_up_epochs) /
+                    (args.epochs - warm_up_epochs) * math.pi) + 1)
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_func)
+
+    elif args.scheduler == "steplr":
+
+        milestones = [30, 60, 80] if args.epochs == 100 else [60, 120, 160]
+
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=milestones, gamma=args.gamma)
+
+    else:
+        raise TypeError("Invalid scheduler")
+
+    return scheduler
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):

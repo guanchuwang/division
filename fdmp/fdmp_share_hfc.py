@@ -18,18 +18,18 @@ total_act_mem = 0
 total_act_mem_lfc = 0 # torch.tensor(0).type(torch.long)
 total_act_mem_hfc = 0 # torch.tensor(0).type(torch.long)
 
-# @torch.no_grad()
-# def abs_window_size(N, window_size):
-#     if config.round_window:
-#         return round(window_size*N + 0.5)
-#     else:
-#         return round(window_size*N)
+@torch.no_grad()
+def abs_window_size(N, window_size):
+    if config.round_window:
+        return round(window_size*N + 0.5)
+    else:
+        return round(window_size*N)
 
 class FDMP_(Function):
 
     @staticmethod
     @torch.no_grad()
-    def no_scheme_compute_quantization_bits(input, group_size):
+    def no_scheme_compute_quantization_bits(input, group_size, device):
         N = input.shape[0]
         D = input.shape[1]
         input_flatten = input.view(N, -1)
@@ -87,119 +87,108 @@ class FDMP_(Function):
 
         return data
 
-    # @staticmethod
-    # @torch.no_grad()
-    # def freq_divide(x, dct_op, window_size, device=None):
-    #
-    #     # print(x.device, self.dct_layer.weight.device)
-    #
-    #     if window_size <= 0:
-    #         return None, x
-    #
-    #     N = x.shape[-1]
-    #     n = abs_window_size(N, window_size)
-    #     dct_matrix = WDCT.generate_dct_matrix(N, n, device)
-    #     # dct_matrix = torch.ones((n, N), device=device)
-    #     x_lfc_dct = dct_op(dct_matrix, x)
-    #
-    #     # x_lfc = F.avg_pool2d(x, 3, stride=1, padding=1)
-    #     # x_lfc_dct = x_dct[:, :, 0:n, 0:n].clone()
-    #     # x_hfc_dct = x_dct.mean(dim=1).unsqueeze(dim=1)
-    #
-    #     x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
-    #     # x_lfc_dct_mean = x_lfc_dct.mean(dim=1).unsqueeze(dim=1)
-    #     # x_lfc_mean = dct_op(dct_matrix, x_lfc_dct_mean, inverse=True)
-    #     # x_mean = x.mean(dim=1).unsqueeze(dim=1)
-    #
-    #     x_hfc = x - x_lfc
-    #     return x_lfc_dct, x_hfc # x - x_lfc_mean # x_mean - x_lfc_mean
+    @staticmethod
+    @torch.no_grad()
+    def freq_divide(x, dct_op, window_size, device=None):
+
+        # print(x.device, self.dct_layer.weight.device)
+
+        if window_size <= 0:
+            return None, x
+
+        N = x.shape[-1]
+        n = abs_window_size(N, window_size)
+        dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+        # dct_matrix = torch.ones((n, N), device=device)
+        x_lfc_dct = dct_op(dct_matrix, x)
+
+        # x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+        x_lfc_dct_mean = x_lfc_dct.mean(dim=1).unsqueeze(dim=1)
+        # x_lfc_mean = dct_op(dct_matrix, x_lfc_dct_mean, inverse=True)
+        # x_mean = x.mean(dim=1).unsqueeze(dim=1)
+
+        x_hfc = torch.zeros_like(x, device=device)
+
+        return x_lfc_dct, x_hfc # x - x_lfc_mean # x_mean - x_lfc_mean
 
     @staticmethod
     @torch.no_grad()
-    def fdmp_simulation(x):
+    def fdmp_simulation(x, dct_op, window_size, device):
 
-        Batch, Channel, Higth, Width = x.shape
+        x_lfc_dct, x_hfc = FDMP.freq_divide(x, dct_op, window_size, device=device)
+        return x_lfc_dct, x_hfc
 
-        if Higth == 1:
-            return x, None, None, None, None
-
-        pool_kernel_size = config.lfc_block if Higth >= config.lfc_block else Higth
-        x_lfc = F.avg_pool2d(x, pool_kernel_size, stride=pool_kernel_size, padding=0)
-        x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
-        x_hfc = x - x_lfc_large
-
-        x_min_group = x_hfc.min(dim=2)[0].min(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
-        x_max_group = x_hfc.max(dim=2)[0].max(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
-        quant_step = (x_max_group - x_min_group) / (2 ** config.hfc_bit_num - 1) # + 1e-8
-        x_reference = x_min_group  # + quant_step/2
-        x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step) # .type(torch.int)
-        x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
-
-        return x_lfc, x_hfc_quant, x_min_group, quant_step
+        # x_min_group = x_hfc.min(dim=2)[0].min(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
+        # x_max_group = x_hfc.max(dim=2)[0].max(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
+        # quant_step = (x_max_group - x_min_group) / (2 ** config.hfc_bit_num) + 1e-8
+        # x_reference = x_min_group  # + quant_step/2
+        # x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step).type(torch.int)
+        # x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
+        #
+        # return x_lfc_dct, x_hfc_quant, x_min_group, quant_step
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp_simulation(feature_pack, q_input_shape):
+    def de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device):
 
-        Batch, Channel, Higth, Width = q_input_shape
-        if Higth == 1:
-            x, _, _, _, _ = feature_pack
-            return x, None, None, None, None
+        x_lfc_dct, x_hfc = feature_pack
 
-        x_lfc, x_hfc_quant, x_min_group, quant_step = feature_pack
-        x_hfc_dequant = x_hfc_quant.type(torch.float) * quant_step + x_min_group
+        N = q_input_shape[-1]
+        n = abs_window_size(N, window_size)
+        dct_matrix = WDCT.generate_dct_matrix(N, n, device)
 
-        x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
-        x = x_lfc_large + x_hfc_dequant
+        x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+        x = x_lfc + x_hfc
 
         return x
 
-
-        # # if window_size <= 0:
-        # #     return x_hfc_dequant
+        # x_lfc_dct, x_hfc_quant, x_min_group, quant_step = feature_pack
+        # x_hfc_dequant = x_hfc_quant.type(torch.float) * quant_step + x_min_group
+        #
+        # if window_size <= 0:
+        #     return x_hfc_dequant
         #
         # N = q_input_shape[-1]
         # n = abs_window_size(N, window_size)
         # dct_matrix = WDCT.generate_dct_matrix(N, n, device)
         #
         # x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
-        # x = x_lfc + x_hfc_dequant
         #
-        # # x = (not config.rm_lfc) * x_lfc + (not config.rm_hfc) * x_hfc_dequant
+        # x = (not config.rm_lfc) * x_lfc + (not config.rm_hfc) * x_hfc_dequant
         #
         # return x
 
 
     @staticmethod
     @torch.no_grad()
-    def fdmp(x):
+    def fdmp(n, x, dct_op, window_size, device):
 
-        Batch, Channel, Higth, Width = x.shape
-
-        if Higth == 1:
+        if window_size >= 1:
             return x, None, None, None, None
 
-        pool_kernel_size = config.lfc_block if Higth >= config.lfc_block else Higth
-        x_lfc = F.avg_pool2d(x, pool_kernel_size, stride=pool_kernel_size, padding=0)
-        x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
-        # x_lfc_large = F.interpolate(x_lfc, scale_factor=pool_kernel_size, mode='nearest')
-        # print(x.shape, x_lfc.shape, x_lfc_large.shape)
-        x_hfc = x - x_lfc_large
+        if config.simulate:
+            return FDMP.fdmp_simulation(x, dct_op, window_size, device)
 
-        featuremap_area = x_hfc.shape[-2:].numel() # should be n
-        # group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
-        # x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size)
+        if window_size <= 0:
+            x_lfc_dct, x_lfc, x_hfc = None, None, x
+        else:
+            x_lfc_dct, x_lfc, x_hfc = FDMP.freq_divide(x, dct_op, window_size, device)
 
+        if config.non_quant:
+            return x_lfc_dct, x_hfc, None, None, None
+
+        # t0 = time.time()
+        featuremap_area = x_hfc.shape[-n:].numel()
         if featuremap_area > config.group_size:
             group_size = config.group_size
-            x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size)
+            x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size, device)
 
         else:
             group_size = featuremap_area
-            x_hfc_groups = x_hfc.reshape(Batch, -1, group_size)
+            x_hfc_groups = x_hfc.reshape(x_hfc.shape[0], -1, group_size)
             q_bits = config.hfc_bit_num
-            q_min = x_hfc_groups.min(dim=-1).values.unsqueeze(dim=-1)
-            mx = x_hfc_groups.max(dim=-1).values.unsqueeze(dim=-1)
+            q_min = x_hfc_groups.min(dim=-1)[0].unsqueeze(dim=-1)
+            mx = x_hfc_groups.max(dim=-1)[0].unsqueeze(dim=-1)
 
         # print(x_hfc.shape, x_hfc_groups.shape, q_bits, q_min.shape, mx.shape)
         # print(x_hfc.dtype, x_hfc_groups.dtype, q_min.dtype, mx.dtype)
@@ -208,66 +197,74 @@ class FDMP_(Function):
 
         q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
 
-        return x_lfc, q_input, q_bits, q_scale, q_min
+        return x_lfc_dct, q_input, q_bits, q_scale, q_min
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp(feature_pack, q_input_shape):
+    def de_fdmp(n, feature_pack, dct_op, q_input_shape, window_size, device):
 
-        # if window_size >= 1:
-        #     x, _, _, _, _ = feature_pack
-        #     return x
-
-        Batch, Channel, Higth, Width = q_input_shape
-
-        if Higth == 1:
+        if window_size >= 1:
             x, _, _, _, _ = feature_pack
             return x
 
-        x_lfc, q_input, q_bits, q_scale, q_min = feature_pack
-
-        # Estimate valid group size
-        featuremap_area = q_input_shape[-2:].numel()
-        group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
-        x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min, group_size)
-
-        # Remove padding
-        num_features = q_input_shape[1:].numel()
-        x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
-        x_hfc_dequant = x_hfc_dequant.view(*q_input_shape).contiguous()
-
-        # pool_kernel_size = config.lfc_block if H >= config.lfc_block else H
-        # x_lfc_large = F.interpolate(x_lfc, scale_factor=pool_kernel_size, mode='nearest')
-        x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
-
-        return x_lfc_large + x_hfc_dequant
+        if config.simulate:
+            return FDMP.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
 
 
-        # if config.non_quant:
+        # if q_input_shape[-1] == 224:
         #
-        #     x_lfc, x_hfc, _, _, _ = feature_pack
-        #     x_lfc_large = F.upsample_nearest(x_lfc, size=(H, W), scale_factor=None)
-        #     return x_lfc_large + x_hfc
+        #     import pdb
+        #     pdb.set_trace()
         #
-        # else:
-        #
-        #     x_lfc, q_input, q_bits, q_scale, q_min = feature_pack
-        #
-        #     # Estimate valid group size
-        #     featuremap_area = q_input_shape[-n:].numel()
-        #     group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
-        #     x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min, group_size)
-        #
-        #     # Remove padding
-        #     num_features = q_input_shape[1:].numel()
-        #     x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
-        #     x_hfc_dequant = x_hfc_dequant.view(*q_input_shape).contiguous()
-        #
-        #     if window_size <= 0:
-        #         return x_hfc_dequant
-        #
-        #     x_lfc_large = F.upsample_nearest(x_lfc, size=(H, W), scale_factor=None)
-        #     return x_lfc_large + x_hfc_dequant
+        #     import time
+        #     torch.cuda.synchronize()
+        #     t1 = time.time()
+        #     x_lfc_dct, q_input, q_bits, q_scale, q_min = feature_pack
+        #     N = q_input_shape[-1]
+        #     n = abs_window_size(N, window_size)
+        #     dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+        #     x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+        #     t2 = time.time()
+        #     print(t2 - t1)
+
+
+        if config.non_quant:
+
+            x_lfc_dct, x_hfc, _, _, _ = feature_pack
+            N = q_input_shape[-1]
+            n = abs_window_size(N, window_size)
+            dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+            # dct_matrix = torch.ones((n, N), device=device)
+            x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+            return x_lfc + x_hfc
+
+        else:
+
+            x_lfc_dct, q_input, q_bits, q_scale, q_min = feature_pack
+
+            # Estimate valid group size
+            featuremap_area = q_input_shape[-n:].numel()
+            group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
+            x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min, group_size)
+
+            # Remove padding
+            num_features = q_input_shape[1:].numel()
+            x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
+            x_hfc_dequant = x_hfc_dequant.view(*q_input_shape).contiguous()
+
+            if window_size <= 0:
+                return x_hfc_dequant
+
+            # IDCT of LFC
+            N = q_input_shape[-1]
+            n = abs_window_size(N, window_size)
+            dct_matrix = WDCT.generate_dct_matrix(N, n, device)
+
+            x_lfc = dct_op(dct_matrix, x_lfc_dct, inverse=True)
+            x = x_lfc + x_hfc_dequant
+
+            return x
+
 
 
 
@@ -448,12 +445,12 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def no_scheme_compute_quantization_bits(input, group_size):
+    def no_scheme_compute_quantization_bits(input, group_size, device):
         if not config.half_precision:
-            return FDMP_.no_scheme_compute_quantization_bits(input, group_size)
+            return FDMP_.no_scheme_compute_quantization_bits(input, group_size, device)
         else:
             with autocast():
-                return FDMP_.no_scheme_compute_quantization_bits(input, group_size)
+                return FDMP_.no_scheme_compute_quantization_bits(input, group_size, device)
 
     @staticmethod
     @torch.no_grad()
@@ -484,39 +481,39 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def fdmp(x):
+    def fdmp(n, x, dct_op, window_size, device):
         if not config.half_precision:
-            return FDMP_.fdmp(x)
+            return FDMP_.fdmp(n, x, dct_op, window_size, device)
         else:
             with autocast():
-                return FDMP_.fdmp(x)
+                return FDMP_.fdmp(n, x, dct_op, window_size, device)
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp(feature_pack, q_input_shape):
+    def de_fdmp(n, feature_pack, dct_op, q_input_shape, window_size, device):
         if not config.half_precision:
-            return FDMP_.de_fdmp(feature_pack, q_input_shape)
+            return FDMP_.de_fdmp(n, feature_pack, dct_op, q_input_shape, window_size, device)
         else:
             with autocast():
-                return FDMP_.de_fdmp(feature_pack, q_input_shape)
+                return FDMP_.de_fdmp(n, feature_pack, dct_op, q_input_shape, window_size, device)
 
     @staticmethod
     @torch.no_grad()
-    def fdmp_simulation(x):
+    def fdmp_simulation(x, dct_op, window_size, device):
         if not config.half_precision:
-            return FDMP_.fdmp_simulation(x)
+            return FDMP_.fdmp_simulation(x, dct_op, window_size, device)
         else:
             with autocast():
-                return FDMP_.fdmp_simulation(x)
+                return FDMP_.fdmp_simulation(x, dct_op, window_size, device)
 
     @staticmethod
     @torch.no_grad()
-    def de_fdmp_simulation(feature_pack, q_input_shape):
+    def de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device):
         if not config.half_precision:
-            return FDMP_.de_fdmp_simulation(feature_pack, q_input_shape)
+            return FDMP_.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
         else:
             with autocast():
-                return FDMP_.de_fdmp_simulation(feature_pack, q_input_shape)
+                return FDMP_.de_fdmp_simulation(feature_pack, dct_op, q_input_shape, window_size, device)
 
 
 

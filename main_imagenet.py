@@ -6,6 +6,7 @@ import time
 import warnings
 import builtins
 from enum import Enum
+import math
 
 import torch
 import torch.nn as nn
@@ -41,7 +42,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='densenet121',
                         ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=200, type=int, metavar='N',
+parser.add_argument('--epochs', default=120, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -57,7 +58,7 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
-parser.add_argument('-p', '--print-freq', default=10, type=int,
+parser.add_argument('-p', '--print-freq', default=500, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -83,39 +84,30 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 
+
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
-parser.add_argument("--conv_window_size", type=float, default=1, help="")
-parser.add_argument("--bn_window_size", type=float, default=1, help="")
-parser.add_argument("--hfc_bit_num", type=int, default=1, help="")
-# parser.add_argument("--opt", type=str, default="SGD", help="")
-parser.add_argument("--save_period", type=int, default=10, help="")
-parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
-parser.add_argument("--group_size", type=int, default=256, help="")
-parser.add_argument("--non_round_window", action="store_false", help="")
-parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument("--scheduler", type=str, default="warmup_coslr", help="")
+parser.add_argument("--save_period", type=int, default=500, help="")
+parser.add_argument("--num_classes", type=int, default=1000, help="")
+parser.add_argument("--vanilla", action="store_true")
+parser.add_argument('--gamma', default=0.2, type=float, help='stepLR gamma')
+parser.add_argument("--lmdb_dataset", action="store_true")
+
+parser.add_argument("--lfc_block", type=int, default=8, help="")
+parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--rm_lfc", action="store_true")
 parser.add_argument("--rm_hfc", action="store_true")
-parser.add_argument("--num_classes", type=int, default=1000, help="")
+parser.add_argument('-hf', '--half_precision', dest='half_precision', action='store_true')
+parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
+parser.add_argument("--group_size", type=int, default=256, help="")
 parser.add_argument("--debug_fd_memory", action="store_true")
-parser.add_argument("--vanilla", action="store_true")
-parser.add_argument("--lmdb_dataset", action="store_true")
 parser.add_argument("--non_quant", action="store_true")
 
-args_fdmp = parser.parse_args()
-config.conv_window_size = args_fdmp.conv_window_size
-config.simulate = args_fdmp.simulate
-config.group_size = args_fdmp.group_size
-config.conv_window_size = args_fdmp.conv_window_size
-config.bn_window_size = args_fdmp.bn_window_size
-config.hfc_bit_num = args_fdmp.hfc_bit_num
-config.round_window = args_fdmp.non_round_window
-config.half_precision = args_fdmp.half_precision
-config.rm_lfc = args_fdmp.rm_lfc
-config.rm_hfc = args_fdmp.rm_hfc
-config.num_classes = args_fdmp.num_classes
-config.debug_fd_memory = args_fdmp.debug_fd_memory
-config.non_quant = args_fdmp.non_quant
-os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args_fdmp.gpu_devices])
+from conf import config, QuantizationConfig, config_init
+
+args_global = parser.parse_args()
+
+config_init(args_global)
 
 
 from module import FDMP_Module
@@ -235,6 +227,8 @@ def main_worker(gpu, ngpus_per_node, args):
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
 
+    scheduler = scheduler_init(optimizer, args)
+
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
@@ -273,28 +267,53 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
-        adjust_learning_rate(optimizer, epoch, args) # Use cos scheduler instead
+        # adjust_learning_rate(optimizer, epoch, args) # Use cos scheduler instead
 
-        # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
+
+        scheduler.step()
+        # print(optimizer.param_groups[0]['lr'])
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
 
         # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
+        # is_best = acc1 > best_acc1
+        # best_acc1 = max(acc1, best_acc1)
+        # if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+        #         and args.rank % ngpus_per_node == 0):
+        #     save_checkpoint({
+        #         'epoch': epoch + 1,
+        #         'arch': args.arch,
+        #         'state_dict': model.state_dict(),
+        #         'best_acc1': best_acc1,
+        #         'optimizer' : optimizer.state_dict(),
+        #     }, is_best)
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank % ngpus_per_node == 0):
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'best_acc1': best_acc1,
-                'optimizer' : optimizer.state_dict(),
-            }, is_best)
 
+def scheduler_init(optimizer, args):
+
+    if args.scheduler == "warmup_coslr":
+
+        warm_up_epochs = 5
+        lr_func = lambda epoch: epoch / warm_up_epochs if epoch <= warm_up_epochs else 0.5 * 1 * (
+                math.cos(
+                    (epoch - warm_up_epochs) /
+                    (args.epochs - warm_up_epochs) * math.pi) + 1)
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_func)
+
+    elif args.scheduler == "steplr":
+
+        milestones = [30, 60, 80] if args.epochs == 100 else [60, 120, 160]
+
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=milestones, gamma=args.gamma)
+
+    else:
+        raise TypeError("Invalid scheduler")
+
+    return scheduler
 
 
 def dataloader_init(args):
@@ -413,15 +432,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     # end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
-        # measure data loading time
-        torch.cuda.synchronize()
-        batch_start_time = time.time()
         # data_time.update(time.time() - end)
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
         if torch.cuda.is_available():
             target = target.cuda(args.gpu, non_blocking=True)
+
+        torch.cuda.synchronize()
+        batch_start_time = time.time()
 
         # # compute output
         # output = model(images)

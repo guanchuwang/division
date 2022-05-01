@@ -51,10 +51,8 @@ class QuantizationConfig:
         self.adaptive_bn_scheme = True
         self.simulate = False
         self.compress_bn_input = True
-        self.conv_window_size = 1
-        self.bn_window_size = 1
+        self.lfc_block = 8
         self.hfc_bit_num = 2
-        self.round_window = True
         self.half_precision = False
         self.num_classes = 1000
         self.non_quant = False
@@ -68,7 +66,6 @@ class QuantizationConfig:
         self.pipeline_threshold = None
         self.cudnn_benchmark_conv2d = True
         self.swap = False
-        self.vanilla = False
 
         # Debug related flag
         self.debug_memory_model = ast.literal_eval(os.environ.get('DEBUG_MEM', "False"))
@@ -81,6 +78,22 @@ class QuantizationConfig:
 
     def __str__(self):
         return json.dumps(self.__dict__)
+
+
+def config_init(args):
+    
+    config.simulate = args.simulate
+    config.group_size = args.group_size
+    config.lfc_block = args.lfc_block
+    config.hfc_bit_num = args.hfc_bit_num
+    config.half_precision = args.half_precision
+    config.rm_lfc = args.rm_lfc
+    config.rm_hfc = args.rm_hfc
+    config.debug_fd_memory = args.debug_fd_memory
+    os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args.gpu_devices])
+
+    return
+
 
 
 config = QuantizationConfig()

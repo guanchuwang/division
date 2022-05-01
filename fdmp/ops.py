@@ -73,12 +73,21 @@ class fdmp_linear(Function):
 
 class fdmp_convnd(Function):
     @staticmethod
-    def run_forward(n, forward_op, dct_op, ctx, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+    def run_forward(n, forward_op, ctx, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
         # if not ctx.needs_input_grad[1]:
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[1]
         #     return F.conv2d(input, weight, bias, stride, padding, dilation, groups)
 
-        feature_pack = FDMP.fdmp(n, input, dct_op, config.conv_window_size, weight.device)
+        # if config.simulate:
+        #     feature_pack = FDMP.fdmp_simulation(input, dct_op, config.conv_window_size, weight.device)
+        # else:
+        #     feature_pack = FDMP.fdmp(n, input, dct_op, config.conv_window_size, weight.device)
+
+        if config.simulate:
+            feature_pack = FDMP.fdmp_simulation(input)
+        else:
+            feature_pack = FDMP.fdmp(input)
+
 
         ## Save variable for backward
         # ctx.scheme = scheme
@@ -104,7 +113,7 @@ class fdmp_convnd(Function):
         return forward_op(input, weight, bias, stride, padding, dilation, groups)
 
     @staticmethod
-    def run_backward(n, dct_op, ctx, grad_output, bias_reduce_dims, aug):
+    def run_backward(n, ctx, grad_output, bias_reduce_dims, aug):
         # if not ctx.needs_input_grad[1]:
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[1]
         #     return None, None, None, None, None, None, None, None
@@ -116,7 +125,12 @@ class fdmp_convnd(Function):
 
         feature_pack, weight, bias = ctx.saved
         # idct_api = WDCT.idct_1d if n == 1 else WDCT.idct_2d
-        input = FDMP.de_fdmp(n, feature_pack, dct_op, input_shape, config.conv_window_size, weight.device)
+
+        if config.simulate:
+            input = FDMP.de_fdmp_simulation(feature_pack, input_shape)
+
+        else:
+            input = FDMP.de_fdmp(feature_pack, input_shape)
 
         del feature_pack, ctx.saved
         empty_cache(config.empty_cache_threshold)
@@ -177,43 +191,48 @@ class fdmp_convnd(Function):
 class fdmp_conv1d(Function):
     @staticmethod
     def forward(ctx, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
-        return convnd.run_forward(1, F.conv1d, WDCT.dct_1d, ctx, input, weight, bias, stride, padding, dilation, groups)
+        return convnd.run_forward(1, F.conv1d, ctx, input, weight, bias, stride, padding, dilation, groups)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return convnd.run_backward(1, WDCT.dct_1d, ctx, grad_output, [0, 2], _single)
+        return convnd.run_backward(1, ctx, grad_output, [0, 2], _single)
 
 
 class fdmp_conv2d(Function):
     @staticmethod
     def forward(ctx, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
-        return fdmp_convnd.run_forward(2, F.conv2d, WDCT.dct_2d, ctx, input, weight, bias, stride, padding, dilation, groups)
+        return fdmp_convnd.run_forward(2, F.conv2d, ctx, input, weight, bias, stride, padding, dilation, groups)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_convnd.run_backward(2, WDCT.dct_2d, ctx, grad_output, [0, 2, 3], _pair)
+        return fdmp_convnd.run_backward(2, ctx, grad_output, [0, 2, 3], _pair)
 
 
 class fdmp_conv3d(Function):
     @staticmethod
     def forward(ctx, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
-        return fdmp_convnd.run_forward(3, F.conv3d, WDCT.dct_3d, ctx, input, weight, bias, stride, padding, dilation, groups)
+        return fdmp_convnd.run_forward(3, F.conv3d, ctx, input, weight, bias, stride, padding, dilation, groups)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_convnd.run_backward(3, WDCT.dct_3d, ctx, grad_output, [0, 2, 3, 4], _triple)
+        return fdmp_convnd.run_backward(3, ctx, grad_output, [0, 2, 3, 4], _triple)
 
 
 
 class fdmp_batch_norm_nd(Function):
     @staticmethod
-    def run_forward(n, dct_op, ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
+    def run_forward(n, ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
         # if not ctx.needs_input_grad[3]:
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[4]
         #     return ext_backward_func.cudnn_batch_norm(
         #         input, weight, bias, running_mean, running_var, training, exponential_average_factor, eps)[0]
 
-        feature_pack = FDMP.fdmp(n, input, dct_op, config.bn_window_size, weight.device)
+
+        if config.simulate:
+            feature_pack = FDMP.fdmp_simulation(input)
+
+        else:
+            feature_pack = FDMP.fdmp(input)
 
         empty_cache(config.empty_cache_threshold)
 
@@ -241,7 +260,7 @@ class fdmp_batch_norm_nd(Function):
         return output
 
     @staticmethod
-    def run_backward(n, dct_op, ctx, grad_output):
+    def run_backward(n, ctx, grad_output):
         # if not ctx.needs_input_grad[3]:
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[4]
         #     return None, None, None, None, None, None, None, None, None
@@ -249,7 +268,11 @@ class fdmp_batch_norm_nd(Function):
         feature_pack, weight, running_mean, running_var, save_mean, save_var, training, eps, reserve = ctx.saved
         input_shape = ctx.other_args
 
-        input = FDMP.de_fdmp(n, feature_pack, dct_op, input_shape, config.bn_window_size, weight.device)
+        if config.simulate:
+            input = FDMP.de_fdmp_simulation(feature_pack, input_shape)
+
+        else:
+            input = FDMP.de_fdmp(feature_pack, input_shape)
 
         del feature_pack, ctx.saved
         empty_cache(config.empty_cache_threshold)
@@ -280,35 +303,38 @@ class fdmp_batch_norm_nd(Function):
 class fdmp_batch_norm1d(Function):
     @staticmethod
     def forward(ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
-        return fdmp_batch_norm_nd.run_forward(1, WDCT.dct_1d, ctx, input, running_mean, running_var, weight, bias,
+        return fdmp_batch_norm_nd.run_forward(1, ctx, input, running_mean, running_var, weight, bias,
                                               training, exponential_average_factor, eps)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_batch_norm_nd.run_backward(1, WDCT.dct_1d, ctx, grad_output)
+        return fdmp_batch_norm_nd.run_backward(1, ctx, grad_output)
 
 
 class fdmp_batch_norm2d(Function):
     @staticmethod
     def forward(ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
-        return fdmp_batch_norm_nd.run_forward(2, WDCT.dct_2d, ctx, input, running_mean, running_var, weight, bias,
+        return fdmp_batch_norm_nd.run_forward(2, ctx, input, running_mean, running_var, weight, bias,
                                               training, exponential_average_factor, eps)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_batch_norm_nd.run_backward(2, WDCT.dct_2d, ctx, grad_output)
+        return fdmp_batch_norm_nd.run_backward(2, ctx, grad_output)
 
 
 class fdmp_batch_norm3d(Function):
     @staticmethod
     def forward(ctx, input, running_mean, running_var, weight, bias, training, exponential_average_factor, eps):
-        return fdmp_batch_norm_nd.run_forward(3, WDCT.dct_3d, ctx, input, running_mean, running_var, weight, bias,
+        return fdmp_batch_norm_nd.run_forward(3, ctx, input, running_mean, running_var, weight, bias,
                                               training, exponential_average_factor, eps)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return fdmp_batch_norm_nd.run_backward(3, WDCT.dct_3d, ctx, grad_output)
+        return fdmp_batch_norm_nd.run_backward(3, ctx, grad_output)
 
+
+
+####### Up to revise!
 
 class fdmp_conv_transposend(Function):
     @staticmethod
