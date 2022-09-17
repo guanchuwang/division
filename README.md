@@ -55,9 +55,9 @@ bash script/speed_benchmark.sh
 ### Model Accuracy
 
 <div align=center>
-<img width="350" height="220" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_blpa.png">
-<img width="350" height="220" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_acgc.png">
-<img width="350" height="220" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_actnn.png">
+<img width="250" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_blpa.png">
+<img width="350" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_acgc.png">
+<img width="420" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_actnn.png">
 </div>
 
 
