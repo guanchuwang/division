@@ -30,9 +30,21 @@ Transformation to the LMDB-format aims to reduce the communication cost. It will
 
 ### Model Accuracy
 
+<div align=center>
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_blpa.png">
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_acgc.png">
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_actnn.png">
+</div>
+
+
 
 ### Training Memory Cost
-
+<div align=center>
+<img width="700" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/memory_cost_table.png">
+</div>
 
 ### Training Throughput
-
+<div align=center>
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/resnet50_throughput_imagenet.png">
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/wrn50_2_throughput_imagenet.png">
+</div>
