@@ -1,0 +1,1 @@
+{"network": "wide_resnet50_2", "algorithm": "Division", "model_only": 0.26, "data_loader": -0.0, "batch_size": 128, "total": 2.12, "activation": 1.27}

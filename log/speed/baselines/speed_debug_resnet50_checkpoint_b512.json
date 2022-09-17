@@ -1,0 +1,1 @@
+{"network": "resnet50", "algorithm": "Checkpoint", "batch_size": 512, "ips": 122.87, "tstamp": 1661382433.96}

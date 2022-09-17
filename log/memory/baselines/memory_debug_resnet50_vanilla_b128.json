@@ -1,0 +1,1 @@
+{"network": "resnet50", "algorithm": "vanilla", "model_only": 0.1, "data_loader": -0.0, "batch_size": 128, "total": 10.62, "activation": 10.25}

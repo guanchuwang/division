@@ -1,0 +1,1 @@
+{"network": "resnet50", "algorithm": "Checkpoint", "model_only": 0.1, "data_loader": -0.0, "batch_size": 256, "total": 4.03, "activation": 3.59}

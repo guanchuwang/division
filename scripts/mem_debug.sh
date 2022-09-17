@@ -3,11 +3,9 @@
 
 
 script="mem_speed_benchmark.py"
-data="/data/zhimengj/dataset/CV/ImageNet/"
+data=<Your Dataset Folder>
 model_resnet50="resnet50"
 model_wrn50_2="wide_resnet50_2"
-model_densenet161="densenet161"
-
 
 python $script --gpu 2 -a $model_resnet50 --data $data -b 32  --log_fname memory_debug_resnet50_division_b32.json
 python $script --gpu 2 -a $model_resnet50 --data $data -b 64  --log_fname memory_debug_resnet50_division_b64.json

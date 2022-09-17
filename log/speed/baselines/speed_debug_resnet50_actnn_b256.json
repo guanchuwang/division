@@ -1,0 +1,1 @@
+{"network": "resnet50", "algorithm": "actnn", "batch_size": 256, "ips": 308.33, "tstamp": 1661379540.36}

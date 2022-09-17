@@ -1,0 +1,1 @@
+{"network": "wide_resnet50_2", "algorithm": "Division", "batch_size": 512, "ips": 253.39, "tstamp": 1661373907.02}
