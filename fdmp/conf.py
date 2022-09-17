@@ -3,59 +3,19 @@ import os
 import warnings
 import json
 
-# def set_optimization_level(level):
-#     if level == 'L0':      # Do nothing
-#         config.compress_activation = False
-#         config.adaptive_conv_scheme = config.adaptive_bn_scheme = False
-#     elif level == 'L1':    # 4-bit conv + 32-bit bn
-#         config.activation_compression_bits = [4]
-#         config.adaptive_conv_scheme = config.adaptive_bn_scheme = False
-#         config.enable_quantized_bn = False
-#     elif level == 'L2':    # 4-bit
-#         config.activation_compression_bits = [4]
-#         config.adaptive_conv_scheme = config.adaptive_bn_scheme = False
-#     elif level == 'L3':   # 2-bit
-#         pass
-#     elif level == 'L3.1': # 2-bit + light system optimization
-#         pass
-#         config.cudnn_benchmark_conv2d = False
-#         config.empty_cache_threshold = 0.2
-#         config.pipeline_threshold = 3 * 1024**3
-#     elif level == 'L4':    # 2-bit + swap
-#         pass
-#         config.swap = True
-#     elif level == 'L5':    # 2-bit + swap + defragmentation
-#         config.swap = True
-#         os.environ['PYTORCH_CACHE_THRESHOLD'] = '256000000'
-#         warnings.warn("The defragmentation at L5 requires modification of the c++ "
-#                       "code of PyTorch. You need to compile this special fork of "
-#                       "PyTorch: https://github.com/merrymercy/pytorch/tree/actnn_exp")
-#     elif level == 'swap':
-#         config.swap = True
-#         config.compress_activation = False
-#     else:
-#         raise ValueError("Invalid level: " + level)
-
 class QuantizationConfig:
     def __init__(self):
-        self.compress_activation = True
-        self.activation_compression_bits = [2, 8, 8]
-        self.pergroup = True
-        self.perlayer = True
-        self.initial_bits = 8
-        self.stochastic = True
-        self.train = True
-        self.group_size = 256
-        self.use_gradient = False
-        self.adaptive_conv_scheme = True
-        self.adaptive_bn_scheme = True
-        self.simulate = False
+
         self.compress_bn_input = True
+        self.num_classes = 1000
+        self.non_quant = False
+        self.max_thread = 1024
+
+        self.simulate = False
+        self.group_size = 256
         self.lfc_block = 8
         self.hfc_bit_num = 2
         self.half_precision = False
-        self.num_classes = 1000
-        self.non_quant = False
 
         # Ablation study
         self.lfc_flag = True
@@ -81,16 +41,18 @@ class QuantizationConfig:
 
 
 def config_init(args):
-    
+
     config.simulate = args.simulate
     config.group_size = args.group_size
     config.lfc_block = args.lfc_block
     config.hfc_bit_num = args.hfc_bit_num
-    config.half_precision = args.half_precision
+    config.half_precision = args.amp
     config.rm_lfc = args.rm_lfc
     config.rm_hfc = args.rm_hfc
     config.debug_fd_memory = args.debug_fd_memory
-    os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args.gpu_devices])
+
+    if args.gpu_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(id) for id in args.gpu_devices])
 
     return
 

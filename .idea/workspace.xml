@@ -2,9 +2,48 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="6168e257-34e3-4f7a-af6e-3a9d39e02b9d" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/main_dctb_cifar100.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_dctb_cifar100.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ops.py" beforeDir="false" afterPath="$PROJECT_DIR$/ops.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ops_half.py" beforeDir="false" afterPath="$PROJECT_DIR$/ops_half.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/deployment.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/deployment.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/webServers.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/FDMP.xmind" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/acc_plot/acc_converge_plot.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/acc_plot/acc_plot.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/acc_plot/loss_plot.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cifar_models/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/cifar_models/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cifar_models/dctb/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cifar_models/dctb/googlenet.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cifar_models/dctb/resnet.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cifar_models/dctb/resnet_actnn.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cifar_models/groundtrue_models/resnet.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/fdmp/conf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp.py" beforeDir="false" afterPath="$PROJECT_DIR$/fdmp/fdmp.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_block_dct.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_dct.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_fdq copy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_fdq.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_freq_quant.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_share_hfc.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/fdmp_share_hfc2.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/layers.py" beforeDir="false" afterPath="$PROJECT_DIR$/fdmp/layers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/ops.py" beforeDir="false" afterPath="$PROJECT_DIR$/fdmp/ops.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/fdmp/ops_half.py" beforeDir="false" afterPath="$PROJECT_DIR$/fdmp/ops_half.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_cifar10.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_cifar100.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_imagenet.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/densenet121_cifar100.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/densenet121_imagenet.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/mobilenet_baseline_imagenet.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/mobilenet_cifar100.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/mobilenet_fdq_cifar10.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/mobilenet_fdq_imagenet.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/resnet18_cifar10.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/resnet18_cifar100.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/resnet18_imagenet.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/resnet34_cifar100.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/resnet50_cifar100.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/resnet50_imagenet.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_script/shufflenet_v2_x1_0_cifar100.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils.py" beforeDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -17,68 +56,11 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="375">
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/module.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="192">
-              <caret line="8" column="21" lean-forward="true" selection-start-line="8" selection-start-column="21" selection-end-line="8" selection-end-column="21" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/layers.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="96">
-              <caret line="29" column="29" selection-start-line="29" selection-start-column="29" selection-end-line="29" selection-end-column="29" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/main_dctb_cifar100.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="153">
-              <caret line="26" lean-forward="true" selection-start-line="26" selection-end-line="26" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/ops.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="264">
-              <caret line="11" lean-forward="true" selection-start-line="11" selection-end-line="11" />
-            </state>
-          </provider>
-        </entry>
-      </file>
       <file pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/ops_half.py">
+        <entry file="file://$PROJECT_DIR$/scripts/mem_debug.sh">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="170">
-              <caret line="11" lean-forward="true" selection-start-line="11" selection-end-line="11" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/conf.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1608">
-              <caret line="67" column="47" selection-start-line="67" selection-start-column="47" selection-end-line="67" selection-end-column="47" />
-              <folding>
-                <element signature="e#0#10#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/fdmp.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="192">
-              <caret line="8" selection-start-line="8" selection-end-line="8" />
+            <state relative-caret-position="672">
+              <caret line="28" column="13" lean-forward="true" selection-start-line="28" selection-start-column="13" selection-end-line="28" selection-end-column="13" />
             </state>
           </provider>
         </entry>
@@ -91,6 +73,10 @@
       <find>autocast</find>
       <find>print</find>
       <find>global_timer</find>
+      <find>FDMP_</find>
+      <find>simulate</find>
+      <find>load_data</find>
+      <find>zhi</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -108,6 +94,15 @@
         <option value="$PROJECT_DIR$/../../main_dctb_cifar100.py" />
         <option value="$PROJECT_DIR$/ops.py" />
         <option value="$PROJECT_DIR$/ops_half.py" />
+        <option value="$PROJECT_DIR$/fdmp/fdmp.py" />
+        <option value="$PROJECT_DIR$/fdmp/layers.py" />
+        <option value="$PROJECT_DIR$/fdmp/conf.py" />
+        <option value="$PROJECT_DIR$/fdmp/ops.py" />
+        <option value="$PROJECT_DIR$/train.py" />
+        <option value="$PROJECT_DIR$/train_cifar10.py" />
+        <option value="$PROJECT_DIR$/train_cifar100.py" />
+        <option value="$PROJECT_DIR$/../../plot/acc_plot.py" />
+        <option value="$PROJECT_DIR$/scripts/mem_debug.sh" />
       </list>
     </option>
   </component>
@@ -131,13 +126,13 @@
         <subPane>
           <expand>
             <path>
-              <item name="fdq" type="b2602c69:ProjectViewProjectNode" />
-              <item name="fdq" type="462c0819:PsiDirectoryNode" />
+              <item name="division" type="b2602c69:ProjectViewProjectNode" />
+              <item name="division" type="462c0819:PsiDirectoryNode" />
             </path>
             <path>
-              <item name="fdq" type="b2602c69:ProjectViewProjectNode" />
-              <item name="fdq" type="462c0819:PsiDirectoryNode" />
-              <item name="utils" type="462c0819:PsiDirectoryNode" />
+              <item name="division" type="b2602c69:ProjectViewProjectNode" />
+              <item name="division" type="462c0819:PsiDirectoryNode" />
+              <item name="fdmp" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
           <select />
@@ -214,7 +209,7 @@
     <frame x="0" y="0" width="1440" height="900" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.1757925" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.17867436" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
@@ -230,7 +225,7 @@
       <window_info anchor="bottom" id="Event Log" order="10" side_tool="true" />
       <window_info anchor="bottom" id="Terminal" order="11" weight="0.3292232" />
       <window_info anchor="bottom" id="Python Console" order="12" />
-      <window_info anchor="bottom" id="File Transfer" order="13" visible="true" weight="0.3218249" />
+      <window_info anchor="bottom" id="File Transfer" order="13" visible="true" weight="0.15782984" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
       <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
       <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
@@ -246,72 +241,124 @@
     <option name="myLimit" value="2678400000" />
   </component>
   <component name="editorHistoryManager">
-    <entry file="file://$PROJECT_DIR$/../../ops.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="296">
-          <caret line="15" column="9" selection-start-line="15" selection-start-column="9" selection-end-line="15" selection-end-column="9" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/../../ops.py" />
     <entry file="file://$PROJECT_DIR$/actnn/__init__.py" />
     <entry file="file://$PROJECT_DIR$/actnn/layers.py" />
     <entry file="file://$PROJECT_DIR$/timer.py" />
-    <entry file="file://$PROJECT_DIR$/layers.py">
+    <entry file="file://$PROJECT_DIR$/layers.py" />
+    <entry file="file://$PROJECT_DIR$/conf.py" />
+    <entry file="file://$PROJECT_DIR$/fdmp.py" />
+    <entry file="file://$PROJECT_DIR$/main_dctb_cifar100.py" />
+    <entry file="file://$PROJECT_DIR$/../../main_dctb_cifar100.py" />
+    <entry file="file://$PROJECT_DIR$/module.py" />
+    <entry file="file://$PROJECT_DIR$/ops.py" />
+    <entry file="file://$PROJECT_DIR$/ops_half.py" />
+    <entry file="file://$PROJECT_DIR$/fdmp/fdmp.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="96">
-          <caret line="29" column="29" selection-start-line="29" selection-start-column="29" selection-end-line="29" selection-end-column="29" />
+        <state relative-caret-position="58">
+          <caret line="316" column="10" selection-start-line="316" selection-start-column="6" selection-end-line="316" selection-end-column="10" />
+          <folding>
+            <element signature="e#0#12#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/conf.py">
+    <entry file="file://$PROJECT_DIR$/fdmp/layers.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1608">
-          <caret line="67" column="47" selection-start-line="67" selection-start-column="47" selection-end-line="67" selection-end-column="47" />
+        <state relative-caret-position="-10217">
+          <caret line="23" selection-start-line="23" selection-end-line="23" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/fdmp/module.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-2781">
+          <folding>
+            <element signature="e#0#105#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/fdmp/ops.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="240">
+          <caret line="335" selection-start-line="335" selection-end-line="335" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/fdmp/ops_half.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="175">
+          <caret line="90" lean-forward="true" selection-start-line="90" selection-end-line="90" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/fdmp/utils.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-435">
+          <folding>
+            <element signature="e#0#9#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/fdmp/conf.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="87">
+          <caret line="7" lean-forward="true" selection-start-line="7" selection-end-line="7" />
           <folding>
             <element signature="e#0#10#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/fdmp.py">
+    <entry file="file://$PROJECT_DIR$/train.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="192">
-          <caret line="8" selection-start-line="8" selection-end-line="8" />
+        <state relative-caret-position="175">
+          <caret line="406" column="44" selection-start-line="406" selection-start-column="44" selection-end-line="406" selection-end-column="44" />
+          <folding>
+            <element signature="e#0#15#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/main_dctb_cifar100.py">
+    <entry file="file://$PROJECT_DIR$/train_cifar100.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="153">
-          <caret line="26" lean-forward="true" selection-start-line="26" selection-end-line="26" />
+        <state relative-caret-position="151">
+          <caret line="274" column="13" selection-start-line="274" selection-start-column="13" selection-end-line="274" selection-end-column="13" />
+          <folding>
+            <element signature="e#0#15#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/../../main_dctb_cifar100.py">
+    <entry file="file://$PROJECT_DIR$/train_cifar10.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="188">
-          <caret line="27" column="32" selection-start-line="27" selection-start-column="20" selection-end-line="27" selection-end-column="32" />
+        <state relative-caret-position="89">
+          <caret line="274" column="46" selection-start-line="274" selection-start-column="46" selection-end-line="274" selection-end-column="46" />
+          <folding>
+            <element signature="e#0#15#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/module.py">
+    <entry file="file://$PROJECT_DIR$/../../plot/acc_plot.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="192">
-          <caret line="8" column="21" lean-forward="true" selection-start-line="8" selection-start-column="21" selection-end-line="8" selection-end-column="21" />
+        <state relative-caret-position="1316">
+          <caret line="77" selection-start-line="77" selection-end-line="77" />
+          <folding>
+            <element signature="e#0#9#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/ops.py">
+    <entry file="file://$PROJECT_DIR$/scripts/mem_debug.sh">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="264">
-          <caret line="11" lean-forward="true" selection-start-line="11" selection-end-line="11" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/ops_half.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="170">
-          <caret line="11" lean-forward="true" selection-start-line="11" selection-end-line="11" />
+        <state relative-caret-position="672">
+          <caret line="28" column="13" lean-forward="true" selection-start-line="28" selection-start-column="13" selection-end-line="28" selection-end-column="13" />
         </state>
       </provider>
     </entry>

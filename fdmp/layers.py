@@ -21,9 +21,6 @@ from ops_half import fdmp_linear_half
 from ops_half import fdmp_conv1d_half, fdmp_conv2d_half, fdmp_conv3d_half
 from ops_half import fdmp_conv_transpose1d_half, fdmp_conv_transpose2d_half, fdmp_conv_transpose3d_half
 
-# from actnn.ops import linear, batch_norm, conv1d, conv2d, conv3d, sync_batch_norm
-# from actnn.ops import conv_transpose1d, conv_transpose2d, conv_transpose3d
-# import actnn.cpp_extension.quantization as ext_quantization
 import cpp_extension.quantization as ext_quantization
 
 

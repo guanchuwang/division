@@ -7,7 +7,7 @@ import cpp_extension.backward_func as ext_backward_func
 from conf import config
 import time
 
-from utils.actnn_utils import *
+from utils import *
 
 from ops import fdmp_linear
 from ops import fdmp_conv2d, fdmp_conv1d

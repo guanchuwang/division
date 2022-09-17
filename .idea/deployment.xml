@@ -1,15 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="datalab5_eff_contrastive">
-    <serverData>
-      <paths name="datalab5_eff_contrastive">
-        <serverdata>
-          <mappings>
-            <mapping deploy="python_project/eff_contrastive/test/fdq" local="$PROJECT_DIR$" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
-    </serverData>
+  <component name="PublishConfigData" autoUpload="Always">
     <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>

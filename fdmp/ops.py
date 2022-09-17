@@ -3,16 +3,17 @@ import torch
 from torch.autograd.function import Function
 import torch.nn.functional as F
 from torch.nn.modules.utils import _single, _pair, _triple
+# import exact.cpp_extension.backward_func as ext_backward_func
 import cpp_extension.backward_func as ext_backward_func
 from conf import config
 import time
 
-from utils.actnn_utils import *
+from utils import *
 
 from fdmp import FDMP, WDCT
 from conf import config, QuantizationConfig
-from torch.cuda.amp import autocast as autocast
-from torch.cuda.amp import custom_fwd, custom_bwd
+# from torch.cuda.amp import autocast as autocast
+# from torch.cuda.amp import custom_fwd, custom_bwd
 
 conv2d_layer_ct = 0
 bn_layer_ct = 0
@@ -79,14 +80,11 @@ class fdmp_convnd(Function):
         #     return F.conv2d(input, weight, bias, stride, padding, dilation, groups)
 
         # if config.simulate:
-        #     feature_pack = FDMP.fdmp_simulation(input, dct_op, config.conv_window_size, weight.device)
+        #     feature_pack = FDMP.fdmp_simulation(input)
         # else:
-        #     feature_pack = FDMP.fdmp(n, input, dct_op, config.conv_window_size, weight.device)
+        #     feature_pack = FDMP.fdmp(input)
 
-        if config.simulate:
-            feature_pack = FDMP.fdmp_simulation(input)
-        else:
-            feature_pack = FDMP.fdmp(input)
+        feature_pack = FDMP.fdmp(input)
 
 
         ## Save variable for backward
@@ -104,8 +102,10 @@ class fdmp_convnd(Function):
             total_act_mem += compute_tensor_bytes(feature_pack)
             print("Act mem: %.2f MB" % (total_act_mem / 1024 ** 2))
 
+        # print("layer:", n)
         # print(input.dtype, weight.dtype)
         # print(input.device, weight.device)
+        # print(input.shape, weight.shape)
         # print(bias, stride, padding, dilation, groups)
         # import pdb
         # pdb.set_trace()
@@ -332,9 +332,6 @@ class fdmp_batch_norm3d(Function):
     def backward(ctx, grad_output):
         return fdmp_batch_norm_nd.run_backward(3, ctx, grad_output)
 
-
-
-####### Up to revise!
 
 class fdmp_conv_transposend(Function):
     @staticmethod
