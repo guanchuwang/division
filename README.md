@@ -3,6 +3,11 @@
 ## Research Motivation
 
 
+
+## DIVISION Framework
+
+
+
 ## Dependency
 ````angular2html
 python >= 3.6
@@ -14,7 +19,7 @@ pyarrow >= 6.0.1
 
 ## Prepare the ImageNet dataset
 
-First, download the ImageNet dataset from [image-net.org](https://image-net.org/challenges/LSVRC/index.php). Then, generate the LMDB-format ImageNet dataset:
+First, download the ImageNet dataset from [image-net.org](https://image-net.org/challenges/LSVRC/index.php). Then, generate the LMDB-format ImageNet dataset by running:
 ````angular2html
 cd data
 python folder2lmdb.py -f [Your ImageNet folder] -s train
@@ -25,7 +30,7 @@ Transformation to the LMDB-format aims to reduce the communication cost. It will
 
 ## Train a deep neural network via DIVISION
 
-Take your dataset folder into <Your Dataset Folder>. Then, run the bash commend:
+Take your dataset folder into [Your Dataset Folder]. Then, run the bash commend:
 ````angular2html
 bash script/resnet18_cifar10_division.sh
 bash script/resnet164_cifar10_division.sh
@@ -37,19 +42,19 @@ bash script/densenet161_division.sh
 
 ## Benchmark the training memory cost of DIVISION
 
-Take your dataset folder into <Your Dataset Folder>. Then, run the bash commend:
+Take your dataset folder into [Your Dataset Folder]. Then, run the bash commend:
 ````angular2html
 bash script/mem_benchmark.sh
 ````
 
 ## Benchmark the training throughput of DIVISION
 
-Take your dataset folder into <Your Dataset Folder>. Then, run the bash commend:
+Take your dataset folder into [Your Dataset Folder]. Then, run the bash commend:
 ````angular2html
 bash script/speed_benchmark.sh
 ````
 
-## Reproduce our experiment results:
+## Reproduce our experiment results
 
 
 ### Model Accuracy
