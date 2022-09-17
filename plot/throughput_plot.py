@@ -237,7 +237,7 @@ plt.legend(loc='upper left', fontsize=18, ncol=2)
 plt.grid(axis='y')
 
 plt.subplots_adjust(left=0.135, bottom=0.12, top=0.96, right=0.99, wspace=0.01) # (left=0.125, bottom=0.155, top=0.965, right=0.97, wspace=0.01)
-plt.savefig("../figure/resnet50_throughput_imagenet.pdf")
+plt.savefig("../figure/resnet50_throughput_imagenet.png")
 
 plt.show()
 # plt.close()
