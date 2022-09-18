@@ -62,12 +62,12 @@ and "quantization.cpython-36m-x86_64-linux-gnu.so" in the "cpp_extension" folder
 
 Train a DNN using DIVISION by running the bash commend:
 ````angular2html
-bash script/resnet18_cifar10_division.sh
-bash script/resnet164_cifar10_division.sh
-bash script/densenet121_cifar100_division.sh
-bash script/resnet164_cifar100_division.sh
-bash script/resnet50_division.sh
-bash script/densenet161_division.sh
+bash scripts/resnet18_cifar10_division.sh
+bash scripts/resnet164_cifar10_division.sh
+bash scripts/densenet121_cifar100_division.sh
+bash scripts/resnet164_cifar100_division.sh
+bash scripts/resnet50_division.sh
+bash scripts/densenet161_division.sh
 ````
 
 Check the model accuracy and training log files.
@@ -84,14 +84,14 @@ Check the model accuracy and training log files.
 
 ### Benchmark the training memory cost by running the bash commend:
 ````angular2html
-bash script/mem_benchmark.sh
+bash scripts/mem_benchmark.sh
 ````
 
 ### Benchmark the training throughput of DIVISION
 
 Benchmark the training throughput by running the bash commend:
 ````angular2html
-bash script/speed_benchmark.sh
+bash scripts/speed_benchmark.sh
 ````
 
 ## Reproduce our experiment results

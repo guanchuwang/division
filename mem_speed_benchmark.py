@@ -106,7 +106,7 @@ parser.add_argument("--group_size", type=int, default=1024, help="") # cannot la
 parser.add_argument("--debug_fd_memory", action="store_true")
 parser.add_argument("--non_quant", action="store_true")
 parser.add_argument("--log_fname", type=str, default="memory_debug.json")
-parser.add_argument("--outputdir", type=str, default="./debug")
+parser.add_argument("--outputdir", type=str, default="./log")
 
 
 from conf import config, config_init
