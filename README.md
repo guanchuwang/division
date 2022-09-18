@@ -2,7 +2,7 @@
 
 ## Research Motivation
 
-Existing work of activation compressed trainin relies on searching for optimal bit-width during DNN training to reduce the quantization noise, which makes the procedure complicated and less transparent.
+Existing work of activation compressed training (ACT) relies on searching for optimal bit-width during DNN training to reduce the quantization noise, which makes the procedure complicated and less transparent.
 
 In our project, we have an instructive observation: **DNN backward propagation mainly utilizes the low-frequency component (LFC) of the activation maps, while the majority of memory is for caching the high-frequency component (HFC) during the training.** 
 This indicates the HFC of activation maps is highly redundant and compressible during DNN training.
@@ -92,4 +92,6 @@ bash script/speed_benchmark.sh
 </div>
 
 ### Overall Evaluation
-
+<div align=center>
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/radar.png">
+</div>
