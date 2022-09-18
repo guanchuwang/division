@@ -1,6 +1,8 @@
 # A Concise Framework of Memory Efficient Training via Dual Activation Precision
 
-## Research Motivation
+## About This Wrok
+
+### Research Motivation
 
 Existing work of activation compressed training (ACT) relies on searching for optimal bit-width during DNN training to reduce the quantization noise, which makes the procedure complicated and less transparent.
 
@@ -10,13 +12,13 @@ To this end, we propose a concise and transparent framework to reduce the memory
 During the training, DIVISION preserves the high-precision copy of LFC and compresses the HFC into a light-weight copy with low numerical precision.
 This can significantly reduce the memory cost without negatively affecting the precision of DNN backward propagation such that it maintains competitive model accuracy.
 
-## DIVISION Framework
+### DIVISION Framework
 The framework of DIVISION is shown in the following figure. After the feed-forward operation of each layer, DIVISION estimates the LFC and compresses the HFC into a low-precision copy such that the total memory cost is significantly decreased after the compression. Before the backward propagation of each layer, the low-precision HFC is decompressed and combined with LFC to reconstruct the activation map. 
 <div align=center>
 <img width="1000" height="150" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
 </div>
 
-## Advantages of DIVISION
+### Advantages of DIVISION
 Compared with the existing frameworks that integrate searching into learning, DIVISION has a more concise compressor and decompressor, speeding up the procedure of ACT.
 More importantly, it reveals the compressible (HFC) and non-compressible factors (LFC) during DNN training, improving the transparency of ACT. 
 
@@ -29,8 +31,9 @@ torchvision >= 0.11.2+cu113
 lmdb >= 1.3.0
 pyarrow >= 6.0.1
 ````
+## Run the Code
 
-## Prepare the ImageNet dataset
+### Prepare the ImageNet dataset
 
 First, download the ImageNet dataset from [image-net.org](https://image-net.org/challenges/LSVRC/index.php). Then, generate the LMDB-format ImageNet dataset by running:
 ````angular2html
@@ -41,7 +44,7 @@ cd ../
 ````
 Transformation to the LMDB-format aims to reduce the communication cost. It will be fine to use the original dataset.
 
-## Generate the CUDA executive (*.so) file 
+### Generate the CUDA executive (*.so) file 
 
 Generate the "*.so" file by running:
 ````angular2html
@@ -55,7 +58,7 @@ You should find a "backward_func.cpython-36m-x86_64-linux-gnu.so",
 and "quantization.cpython-36m-x86_64-linux-gnu.so" in the "cpp_extension" folder.
 
 
-## Train a deep neural network via DIVISION
+### Train a deep neural network via DIVISION
 
 Train a DNN using DIVISION by running the bash commend:
 ````angular2html
@@ -66,23 +69,25 @@ bash script/resnet164_cifar100_division.sh
 bash script/resnet50_division.sh
 bash script/densenet161_division.sh
 ````
-Our official training logs: 
-[ResNet-18 on the CIFAR-10 dataset](https://anonymous.4open.science/r/division-5CC0/log/resnet18_cifar10_lb_8_hq_2_coslr_e_100_b_256.txt),
-[ResNet-164 on the CIFAR-10 dataset](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar10_division_coslr_e_100_b_256.txt),
-[DenseNet-121 on the CIFAR-100 dataset](https://anonymous.4open.science/r/division-5CC0/log/densenet121_cifar100_lb_8_hq_2_coslr_e_120_b_256_lr01.txt),
-[ResNet-164 on the CIFAR-100 dataset](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar100_division_coslr_e_200_b_256_lr015.txt),
-[ResNet-50 on the ImageNet dataset](https://anonymous.4open.science/r/division-5CC0/log/log_resnet50_division_B_8_Q_2.txt),
-[DenseNet-161 on the ImageNet dataset](https://anonymous.4open.science/r/division-5CC0/log/log_densenet161_division_B_8_Q_2.txt).
+
+Check the model accuracy and training log files.
+
+|  Dataset   |  Architecture | Top-1 Validation Accuracy | Normal Training Accuracy | Log file | 
+| ---------- | ------------- | ------------------------- | ------------------------ | -------- |
+| CIFAR-10   | ResNet-18     | 94.7 | 94.9 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet18_cifar10_lb_8_hq_2_coslr_e_100_b_256.txt)          |   
+| CIFAR-10   | ResNet-164    | 94.5 | 94.9 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar10_division_coslr_e_100_b_256.txt)          | 
+| CIFAR-100  | DenseNet-121  | 79.5 | 79.8 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/densenet121_cifar100_lb_8_hq_2_coslr_e_120_b_256_lr01.txt) | 
+| CIFAR-100  | ResNet-164    | 76.9 | 77.3 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar100_division_coslr_e_200_b_256_lr015.txt)   | 
+| ImageNet   | ResNet-50     | 75.9 | [76.2](https://paperswithcode.com/lib/torchvision/resnet) | [LOG](https://anonymous.4open.science/r/division-5CC0/log/log_resnet50_division_B_8_Q_2.txt)                         | 
+| ImageNet   | DenseNet-161  | 77.6 | [77.6](https://paperswithcode.com/lib/torchvision/densenet) | [LOG](https://anonymous.4open.science/r/division-5CC0/log/log_densenet161_division_B_8_Q_2.txt)                      | 
 
 
-## Benchmark the training memory cost of DIVISION
-
-Benchmark the training memory cost by running the bash commend:
+### Benchmark the training memory cost by running the bash commend:
 ````angular2html
 bash script/mem_benchmark.sh
 ````
 
-## Benchmark the training throughput of DIVISION
+### Benchmark the training throughput of DIVISION
 
 Benchmark the training throughput by running the bash commend:
 ````angular2html
