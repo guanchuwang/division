@@ -57,7 +57,7 @@ and "quantization.cpython-36m-x86_64-linux-gnu.so" in the "cpp_extension" folder
 
 ## Train a deep neural network via DIVISION
 
-Benchmark the model accuracy by running the bash commend:
+Train a DNN using DIVISION by running the bash commend:
 ````angular2html
 bash script/resnet18_cifar10_division.sh
 bash script/resnet164_cifar10_division.sh
@@ -66,6 +66,14 @@ bash script/resnet164_cifar100_division.sh
 bash script/resnet50_division.sh
 bash script/densenet161_division.sh
 ````
+Our official training logs: 
+[ResNet-18 on the CIFAR-10 dataset](https://anonymous.4open.science/r/division-5CC0/log/resnet18_cifar10_lb_8_hq_2_coslr_e_100_b_256.txt),
+[ResNet-164 on the CIFAR-10 dataset](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar10_division_coslr_e_100_b_256.txt),
+[DenseNet-121 on the CIFAR-100 dataset](https://anonymous.4open.science/r/division-5CC0/log/densenet121_cifar100_lb_8_hq_2_coslr_e_120_b_256_lr01.txt),
+[ResNet-164 on the CIFAR-100 dataset](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar100_division_coslr_e_200_b_256_lr015.txt),
+[ResNet-50 on the ImageNet dataset](https://anonymous.4open.science/r/division-5CC0/log/log_resnet50_division_B_8_Q_2.txt),
+[DenseNet-161 on the ImageNet dataset](https://anonymous.4open.science/r/division-5CC0/log/log_densenet161_division_B_8_Q_2.txt).
+
 
 ## Benchmark the training memory cost of DIVISION
 
