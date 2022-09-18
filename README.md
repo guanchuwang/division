@@ -73,7 +73,7 @@ bash script/densenet161_division.sh
 Check the model accuracy and training log files.
 
 |  Dataset   |  Architecture | Top-1 Validation Accuracy | Normal Training Accuracy | Log file | 
-| ---------- | ------------- | ------------------------- | ------------------------ | -------- |
+| :---: | :---: | :---: | :---: | :---: |
 | CIFAR-10   | ResNet-18     | 94.7 | 94.9 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet18_cifar10_lb_8_hq_2_coslr_e_100_b_256.txt)          |   
 | CIFAR-10   | ResNet-164    | 94.5 | 94.9 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar10_division_coslr_e_100_b_256.txt)          | 
 | CIFAR-100  | DenseNet-121  | 79.5 | 79.8 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/densenet121_cifar100_lb_8_hq_2_coslr_e_120_b_256_lr01.txt) | 
