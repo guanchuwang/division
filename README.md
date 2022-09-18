@@ -13,7 +13,7 @@ This can significantly reduce the memory cost without negatively affecting the p
 ## DIVISION Framework
 The framework of DIVISION is shown in the following figure. After the feed-forward operation of each layer, DIVISION estimates the LFC and compresses the HFC into a low-precision copy such that the total memory cost is significantly decreased after the compression. Before the backward propagation of each layer, the low-precision HFC is decompressed and combined with LFC to reconstruct the activation map. 
 <div align=center>
-<img width="1000" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
+<img width="1000" height="150" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
 </div>
 
 ## Advantages of DIVISION
