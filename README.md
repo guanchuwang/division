@@ -41,9 +41,23 @@ cd ../
 ````
 Transformation to the LMDB-format aims to reduce the communication cost. It will be fine to use the original dataset.
 
+## Generate the CUDA executive (*.so) file 
+
+Generate the "*.so" file by running:
+````angular2html
+cd cpp_extension
+python setup.py build_ext --inplace
+cd ../
+````
+You should find a "backward_func.cpython-36m-x86_64-linux-gnu.so", 
+"calc_precision.cpython-36m-x86_64-linux-gnu.so", 
+"minimax.cpython-36m-x86_64-linux-gnu.so", 
+and "quantization.cpython-36m-x86_64-linux-gnu.so" in the "cpp_extension" folder.
+
+
 ## Train a deep neural network via DIVISION
 
-Take your dataset folder into [Your Dataset Folder]. Then, run the bash commend:
+Benchmark the model accuracy by running the bash commend:
 ````angular2html
 bash script/resnet18_cifar10_division.sh
 bash script/resnet164_cifar10_division.sh
@@ -55,14 +69,14 @@ bash script/densenet161_division.sh
 
 ## Benchmark the training memory cost of DIVISION
 
-Take your dataset folder into [Your Dataset Folder]. Then, run the bash commend:
+Benchmark the training memory cost by running the bash commend:
 ````angular2html
 bash script/mem_benchmark.sh
 ````
 
 ## Benchmark the training throughput of DIVISION
 
-Take your dataset folder into [Your Dataset Folder]. Then, run the bash commend:
+Benchmark the training throughput by running the bash commend:
 ````angular2html
 bash script/speed_benchmark.sh
 ````
@@ -95,3 +109,11 @@ bash script/speed_benchmark.sh
 <div align=center>
 <img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/radar.png">
 </div>
+
+### Acknowledgment
+
+The LMDB-format data loading is developed based on the official repo of [Efficient-PyTorch](https://github.com/Lyken17/Efficient-PyTorch).
+The cuda kernel of activation map quantization is developed based on the official repo of [ActNN](https://arxiv.org/abs/2104.14129).
+
+Thanks those teams for the opensource!
+
