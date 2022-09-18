@@ -15,7 +15,7 @@ This can significantly reduce the memory cost without negatively affecting the p
 ### DIVISION Framework
 The framework of DIVISION is shown in the following figure. After the feed-forward operation of each layer, DIVISION estimates the LFC and compresses the HFC into a low-precision copy such that the total memory cost is significantly decreased after the compression. Before the backward propagation of each layer, the low-precision HFC is decompressed and combined with LFC to reconstruct the activation map. 
 <div align=center>
-<img width="1000" height="150" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
+<img width="1000" height="160" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
 </div>
 
 ### Advantages of DIVISION
@@ -31,7 +31,7 @@ torchvision >= 0.11.2+cu113
 lmdb >= 1.3.0
 pyarrow >= 6.0.1
 ````
-## Run the Code
+## Run this Repo
 
 ### Prepare the ImageNet dataset
 
@@ -128,5 +128,5 @@ bash script/speed_benchmark.sh
 The LMDB-format data loading is developed based on the official repo of [Efficient-PyTorch](https://github.com/Lyken17/Efficient-PyTorch).
 The cuda kernel of activation map quantization is developed based on the official repo of [ActNN](https://arxiv.org/abs/2104.14129).
 
-Thanks those teams for the opensource!
+Thanks those teams for their opensource code!
 
