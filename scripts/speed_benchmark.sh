@@ -3,7 +3,7 @@
 
 
 script="mem_speed_benchmark.py"
-data=<Your Dataset Folder>
+data="./data"
 model_resnet50="resnet50"
 model_wrn50_2="wide_resnet50_2"
 

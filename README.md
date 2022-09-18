@@ -2,10 +2,23 @@
 
 ## Research Motivation
 
+Existing work of activation compressed trainin relies on searching for optimal bit-width during DNN training to reduce the quantization noise, which makes the procedure complicated and less transparent.
 
+In our project, we have an instructive observation: **DNN backward propagation mainly utilizes the low-frequency component (LFC) of the activation maps, while the majority of memory is for caching the high-frequency component (HFC) during the training.** 
+This indicates the HFC of activation maps is highly redundant and compressible during DNN training.
+To this end, we propose a concise and transparent framework to reduce the memory cost of DNN training, Dual ActIVation PrecISION (DIVISION).
+During the training, DIVISION preserves the high-precision copy of LFC and compresses the HFC into a light-weight copy with low numerical precision.
+This can significantly reduce the memory cost without negatively affecting the precision of DNN backward propagation such that it maintains competitive model accuracy.
 
 ## DIVISION Framework
+The framework of DIVISION is shown in the following figure. After the feed-forward operation of each layer, DIVISION estimates the LFC and compresses the HFC into a low-precision copy such that the total memory cost is significantly decreased after the compression. Before the backward propagation of each layer, the low-precision HFC is decompressed and combined with LFC to reconstruct the activation map. 
+<div align=center>
+<img width="1000" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
+</div>
 
+## Advantages of DIVISION
+Compared with the existing frameworks that integrate searching into learning, DIVISION has a more concise compressor and decompressor, speeding up the procedure of ACT.
+More importantly, it reveals the compressible (HFC) and non-compressible factors (LFC) during DNN training, improving the transparency of ACT. 
 
 
 ## Dependency
@@ -77,3 +90,6 @@ bash script/speed_benchmark.sh
 <img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/resnet50_throughput_imagenet.png">
 <img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/wrn50_2_throughput_imagenet.png">
 </div>
+
+### Overall Evaluation
+

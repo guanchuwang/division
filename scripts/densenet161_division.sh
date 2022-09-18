@@ -1,8 +1,8 @@
 #!/bin/bash
 ## division training
 
-datapath=<Your Dataset Folder>
-outputdir="./checkpoint_densenet161_division2/"
+datapath="./data"
+outputdir="./checkpoint_densenet161_division/"
 resume="${outputdir}checkpoint.pth"
 
 torchrun --nproc_per_node=8 train.py --gpu_devices 0 1 2 3 4 5 6 7 -b 64 --epochs 120 --data-path $datapath --output-dir $outputdir --model densenet161 \

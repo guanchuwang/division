@@ -1,7 +1,7 @@
 #!/bin/bash
 ## division training
 
-datapath=<Your Dataset Folder>
+datapath="./data"
 outputdir="./checkpoint_resnet50_division/"
 resume="${outputdir}checkpoint.pth"
 
