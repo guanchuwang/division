@@ -120,7 +120,7 @@ bash scripts/speed_benchmark.sh
 
 ### Overall Evaluation
 <div align=center>
-<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/radar.png">
+<img width="470" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/radar.png">
 </div>
 
 ## Acknowledgment
