@@ -214,7 +214,7 @@ actnn_resnet50_axis = division_resnet50_axis + bar_width
 checkpoint_resnet50_axis = actnn_resnet50_axis + bar_width
 swap_resnet50_axis = actnn_resnet50_axis + 2*bar_width
 
-plt.bar(vanilla_resnet50_axis, speed_resnet50_vanilla, width=bar_width, color="b", label="Vanilla")
+plt.bar(vanilla_resnet50_axis, speed_resnet50_vanilla, width=bar_width, color="b", label="Normal")
 plt.bar(division_resnet50_axis, speed_resnet50_division, width=bar_width, color="r", label="DIVISION")
 plt.bar(actnn_resnet50_axis, speed_resnet50_actnn, width=bar_width, color="g", label="ActNN")
 # plt.bar(BLPA_resnet50_axis, speed_resnet50_BLPA, width=bar_width, color="darkgoldenrod", label="BLPA")
@@ -250,7 +250,7 @@ actnn_wrn50_2_axis = division_wrn50_2_axis + bar_width
 checkpoint_wrn50_2_axis = actnn_wrn50_2_axis + bar_width
 swap_wrn50_2_axis = actnn_wrn50_2_axis + 2*bar_width
 
-plt.bar(vanilla_wrn50_2_axis, speed_wrn50_2_vanilla, width=bar_width, color="b", label="Vanilla")
+plt.bar(vanilla_wrn50_2_axis, speed_wrn50_2_vanilla, width=bar_width, color="b", label="Normal")
 plt.bar(division_wrn50_2_axis, speed_wrn50_2_division, width=bar_width, color="r", label="DIVISION")
 plt.bar(actnn_wrn50_2_axis, speed_wrn50_2_actnn, width=bar_width, color="g", label="ActNN")
 # plt.bar(BLPA_wrn50_2_axis, speed_wrn50_2_BLPA, width=bar_width, color="darkgoldenrod", label="BLPA")
