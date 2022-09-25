@@ -125,8 +125,8 @@ bash scripts/speed_benchmark.sh
 
 ## Acknowledgment
 
-The LMDB-format data loading is developed based on the official repo of [Efficient-PyTorch](https://github.com/Lyken17/Efficient-PyTorch).
-The cuda kernel of activation map quantization is developed based on the official repo of [ActNN](https://arxiv.org/abs/2104.14129).
+The LMDB-format data loading is developed based on the opensource repo of [Efficient-PyTorch](https://github.com/Lyken17/Efficient-PyTorch).
+The cuda kernel of activation map quantization is developed based on the opensource repo of [ActNN](https://arxiv.org/abs/2104.14129).
 
-Thanks those teams for their opensource code!
+Thanks those teams for their contribution to the ML community!
 
