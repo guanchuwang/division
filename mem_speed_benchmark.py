@@ -89,7 +89,6 @@ parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
 parser.add_argument("--scheduler", type=str, default="coslr", help="")
 parser.add_argument("--save_period", type=int, default=1, help="")
 parser.add_argument("--num_classes", type=int, default=1000, help="")
-parser.add_argument("--vanilla", action="store_true")
 parser.add_argument("--debug_memory_op_forward", action="store_true")
 parser.add_argument("--debug_memory_op_backward", action="store_true")
 parser.add_argument('--gamma', default=0.2, type=float, help='stepLR gamma')
@@ -203,12 +202,7 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         print("=> creating model '{}'".format(args.arch))
         model = models.__dict__[args.arch](num_classes=config.num_classes)
-
-    ##########################
-    if args.vanilla:
-        print(model)
-    else:
-        model = FDMP_Module(model)
+    model = FDMP_Module(model)
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
