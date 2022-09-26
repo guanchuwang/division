@@ -1,4 +1,4 @@
-# A Simple Framework for Memory Efficient Training via Dual Activation Precision
+# DIVISION: Memory Efficient Training via Dual Activation Precision
 
 ## About This Wrok
 
