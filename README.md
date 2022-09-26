@@ -1,4 +1,4 @@
-# A Concise Framework of Memory Efficient Training via Dual Activation Precision
+# A Simple Framework for Memory Efficient Training via Dual Activation Precision
 
 ## About This Wrok
 
@@ -8,7 +8,7 @@ Existing work of activation compressed training (ACT) relies on searching for op
 
 In our project, we have an instructive observation: **DNN backward propagation mainly utilizes the low-frequency component (LFC) of the activation maps, while the majority of memory is for caching the high-frequency component (HFC) during the training.** 
 This indicates the HFC of activation maps is highly redundant and compressible during DNN training.
-To this end, we propose a concise and transparent framework to reduce the memory cost of DNN training, Dual ActIVation PrecISION (DIVISION).
+To this end, we propose a simple and transparent framework to reduce the memory cost of DNN training, Dual ActIVation PrecISION (DIVISION).
 During the training, DIVISION preserves the high-precision copy of LFC and compresses the HFC into a light-weight copy with low numerical precision.
 This can significantly reduce the memory cost without negatively affecting the precision of DNN backward propagation such that it maintains competitive model accuracy.
 
@@ -19,7 +19,7 @@ The framework of DIVISION is shown in the following figure. After the feed-forwa
 </div>
 
 ### Advantages of DIVISION
-Compared with the existing frameworks that integrate searching into learning, DIVISION has a more concise compressor and decompressor, speeding up the procedure of ACT.
+Compared with the existing frameworks that integrate searching into learning, DIVISION has a more simplified compressor and decompressor, speeding up the procedure of ACT.
 More importantly, it reveals the compressible (HFC) and non-compressible factors (LFC) during DNN training, improving the transparency of ACT. 
 
 
