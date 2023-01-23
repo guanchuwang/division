@@ -82,18 +82,6 @@ Check the model accuracy and training log files.
 | ImageNet   | DenseNet-161  | 77.6 | [77.6](https://paperswithcode.com/lib/torchvision/densenet) | [LOG](https://anonymous.4open.science/r/division-5CC0/log/log_densenet161_division_B_8_Q_2.txt)                      | 
 
 
-### Benchmark the training memory cost by running the bash commend:
-````angular2html
-bash scripts/mem_benchmark.sh
-````
-
-### Benchmark the training throughput of DIVISION
-
-Benchmark the training throughput by running the bash commend:
-````angular2html
-bash scripts/speed_benchmark.sh
-````
-
 ## Reproduce our experiment results
 
 
