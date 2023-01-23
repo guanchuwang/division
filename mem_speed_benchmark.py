@@ -99,7 +99,6 @@ parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--rm_lfc", action="store_true")
 parser.add_argument("--rm_hfc", action="store_true")
 parser.add_argument("--debug_option", type=str, default="memory", choices=["memory", "speed"])
-parser.add_argument('--amp', dest='amp', action='store_true')
 parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
 parser.add_argument("--group_size", type=int, default=1024, help="") # cannot larger than 1024
 parser.add_argument("--debug_fd_memory", action="store_true")
@@ -115,7 +114,6 @@ args_global = parser.parse_args()
 
 config_init(args_global)
 
-
 from module import FDMP_Module
 from torch.cuda.amp import autocast as autocast
 
@@ -129,11 +127,7 @@ def main():
     args.seed = 0
     args.distributed = False
     args.lmdb_dataset = False
-
-    if args.vanilla == True:
-        args.alg = "vanilla"
-    else:
-        args.alg = "Division"
+    args.alg = "Division"
 
     print(args)
     ngpus_per_node = 1
@@ -491,19 +485,11 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-        # import pdb
-        # pdb.set_trace()
+        if args.debug_option == "memory":
 
-        # compute output
-        if not config.half_precision: # amp
             output = model(images)
             loss = criterion(output, target)
-        else:
-            with autocast():
-                output = model(images)
-                loss = criterion(output, target)
 
-        if args.debug_option == "memory":
             print("========== Before Backward ===========")
             before_backward = get_memory_usage(True, args.gpu)
             act_mem = get_memory_usage(False, args.gpu) - init_mem - compute_tensor_bytes([loss, output])
@@ -524,6 +510,11 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             exp_recorder.record("activation", act_mem / GB, 2)
             exp_recorder.dump(os.path.join(args.outputdir, args.log_fname)) # 'mem_results.json')
             exit(0)
+
+
+        with autocast():
+            output = model(images)
+            loss = criterion(output, target)
 
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
