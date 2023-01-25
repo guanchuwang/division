@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from torch.autograd.function import Function
 from torch.cuda.amp import autocast
 import cpp_extension.quantization as ext_quantization
-# import exact.cpp_extension.quantization as ext_quantization
 import cpp_extension.minimax as ext_minimax
 # import cpp_extension.backward_func as ext_backward_func
 # from torch.cuda.amp import autocast as autocast
@@ -28,72 +27,63 @@ total_act_mem_hfc = 0 # torch.tensor(0).type(torch.long)
 
 class FDMP_(Function):
 
-    # @staticmethod
-    # @torch.no_grad()
-    # def no_scheme_compute_quantization_bits(input, group_size):
-    #     N = input.shape[0]
-    #     C = input.shape[1]
-    #     input_flatten = input.view(N, -1)
-    #     num_features = input_flatten.shape[1]
-    #     # num_pixels = num_features // D
-    #
-    #     # Compute min, max by groups
-    #     if num_features % group_size != 0:
-    #         # Padding
-    #         new_num_features = (num_features // group_size + 1) * group_size
-    #         delta = new_num_features - num_features
-    #         input_flatten = torch.cat([input_flatten,
-    #                                    torch.zeros([N, delta], dtype=input.dtype, device=input.device)], 1)
-    #
-    #     # input_groups = input_flatten.view(-1, group_size)
-    #     mn, mx = ext_minimax.minimax(input_flatten.view(N*C, -1))
-    #     input_groups = input_flatten.view(N*C, -1, group_size)
-    #
-    #     return input_groups, mn, mx
+    @staticmethod
+    @torch.no_grad()
+    def no_scheme_compute_quantization_bits(input, group_size):
+        N = input.shape[0]
+        D = input.shape[1]
+        input_flatten = input.view(N, -1)
+        num_features = input_flatten.shape[1]
+        num_pixels = num_features // D
+
+        # Compute min, max by groups
+        if num_features % group_size != 0:
+            # Padding
+            new_num_features = (num_features // group_size + 1) * group_size
+            delta = new_num_features - num_features
+            input_flatten = torch.cat([input_flatten,
+                                       torch.zeros([N, delta], dtype=input.dtype, device=input.device)], 1)
+
+        input_groups = input_flatten.view(-1, group_size)
+        mn, mx = ext_minimax.minimax(input_groups)
+
+        b = config.hfc_bit_num
+        return input_groups.view(N, -1, group_size), b, mn.view(N, -1, 1), mx.view(N, -1, 1)
 
     @staticmethod
     @torch.no_grad()
-    def quantize_and_pack(data, bits, mn, mx, N):
+    def quantize_and_pack(data, bits, mn, mx):
 
         # Pack to bitstream
+        if isinstance(bits, int):
+            pack_func = ext_quantization.pack_single_precision
+        else:
+            pack_func = ext_quantization.pack_mixed_precision
+
         # print(pack_func)
         # print(bits)
-        # scale = (2 ** bits - 1) / (mx - mn)
 
-        mn_ = mn.view(N, 1, 1).repeat(1, data.shape[1], 1)
-        mx_ = mx.view(N, 1, 1).repeat(1, data.shape[1], 1)
-
-        # print(data.shape)
-        # print(mn_.shape)
-        # print(mx_.shape)
-        # # print(scale.shape)
-        # print(bits, type(bits))
-
-        # output = pack_func(data, mn, mx, scale.to(data.dtype), bits, True)
-        output, scale = ext_quantization.pack_single_precision(data, mn_, mx_, bits, True)
-        scale = scale[:,0,0].clone()
-        # import pdb
-        # pdb.set_trace()
+        output, scale = pack_func(data, mn, mx, bits, True)
 
         return output, scale
 
     @staticmethod
     @torch.no_grad()
-    def dequantize_and_unpack(data, shape, bits, scale, mn):
+    def dequantize_and_unpack(data, shape, bits, scale, mn, group_size):
 
         # Pad to group_size
-        Batch, Channel, Higth, Width = shape
-        num_features = int(shape[2:].numel())
+        N = shape[0]
+        num_features = int(shape[1:].numel())
 
-        if num_features > config.max_thread:
-            mn_ = mn.view(Batch * Channel, 1, 1).repeat(1, Higth, 1)
-            scale_ = scale.view(Batch * Channel, 1, 1).repeat(1, Higth, 1) # N, num_features // group_size, group_size)
-            data = ext_quantization.unpack_single_precision(data, bits, scale_, mn_, Batch * Channel, Higth, Width)
+        num_features = (num_features + (group_size - num_features % group_size) % group_size)
 
+        # Unpack bitstream
+        if isinstance(bits, int):
+            unpack_func = ext_quantization.unpack_single_precision
         else:
-            mn_ = mn.view(Batch * Channel, 1, 1)
-            scale_ = scale.view(Batch * Channel, 1, 1)
-            data = ext_quantization.unpack_single_precision(data, bits, scale_, mn_, Batch * Channel, 1, Higth * Width)
+            unpack_func = ext_quantization.unpack_mixed_precision
+
+        data = unpack_func(data, bits, scale, mn, N, num_features // group_size, group_size)
 
         return data
 
@@ -108,61 +98,40 @@ class FDMP_(Function):
 
         pool_kernel_size = config.lfc_block if Higth >= config.lfc_block else Higth
         x_lfc = F.avg_pool2d(x, pool_kernel_size, stride=pool_kernel_size, padding=0)
-        x_lfc_float16 = x_lfc.to(torch.bfloat16)
-        x_lfc_large = F.upsample_nearest(x_lfc_float16.to(x_lfc.dtype), size=(Higth, Width), scale_factor=None) # x_lfc.dtype
-
-        # x_lfc_3d = x_lfc.reshape(Batch*Channel, x_lfc.shape[2], x_lfc.shape[3])
-        # x_lfc_large_3da = F.interpolate(x_lfc_3d, size=(Width), mode='linear')
-        # x_lfc_large_3db = F.interpolate(x_lfc_large_3da.permute(0,2,1), size=(Higth), mode='linear').permute(0,2,1)
-        # x_lfc_large = x_lfc_large_3db.reshape(Batch, Channel, Higth, Width)
+        x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
+        # x_lfc_large = F.interpolate(x_lfc, scale_factor=pool_kernel_size, mode='nearest')
         # print(x.shape, x_lfc.shape, x_lfc_large.shape)
-
         x_hfc = x - x_lfc_large
 
-        featuremap_area = Higth * Width # x_hfc.shape[-2:].numel()  # should be n
+        featuremap_area = x_hfc.shape[-2:].numel()  # should be n
+        # group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
+        # x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size)
 
-        if featuremap_area > config.max_thread:
-            x_hfc_groups = x_hfc.reshape(Batch * Channel, Higth, Width)
+        if featuremap_area > config.group_size:
+            group_size = config.group_size
+            x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size)
+
         else:
-            x_hfc_groups = x_hfc.reshape(Batch * Channel, 1, Higth * Width)
+            group_size = featuremap_area
+            x_hfc_groups = x_hfc.reshape(Batch, -1, group_size)
+            q_bits = config.hfc_bit_num
+            q_min = x_hfc_groups.min(dim=-1).values.unsqueeze(dim=-1)
+            mx = x_hfc_groups.max(dim=-1).values.unsqueeze(dim=-1)
 
-        q_min = x_hfc_groups.min(dim=-1).values.min(dim=-1).values
-        mx = x_hfc_groups.max(dim=-1).values.max(dim=-1).values
-        q_bits = config.hfc_bit_num
-        q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx, Batch * Channel)
+        # print(x_hfc.shape, x_hfc_groups.shape, q_bits, q_min.shape, mx.shape)
+        # print(x_hfc.dtype, x_hfc_groups.dtype, q_min.dtype, mx.dtype)
+        # print(x_hfc.device, x_hfc_groups.device)
+        # print(q_bits)
 
-        return x_lfc_float16, q_input, q_scale.to(torch.bfloat16), q_min.to(torch.bfloat16)
+        q_input, q_scale = FDMP.quantize_and_pack(x_hfc_groups, q_bits, q_min, mx)
 
-        # return x_lfc, q_input, q_scale, q_min
+        return x_lfc, q_input, q_scale, q_min
 
-        # if x.dtype == torch.float32:
-        #     return x_lfc_float16, q_input, q_scale.to(torch.bfloat16), q_min.to(torch.bfloat16) # Remove x_lfc.to(torch.bfloat16) if accuracy drops
-        # else:
-        #     return x_lfc_float16, q_input, q_scale, q_min
-
-
-        # print(x_lfc.shape, x_lfc.type())
-        # print(q_input.shape, q_input.type())
-        # print(q_scale.shape, q_scale.type())
-        # print(q_min.shape, q_min.type())
-        # mem_lfc = compute_tensor_bytes([x_lfc])
-        # mem_qhfc = compute_tensor_bytes([q_input])
-        # mem_scale = compute_tensor_bytes([q_scale])
-        # mem_mn = compute_tensor_bytes([q_min])
-        # print("lfc:", mem_lfc)
-        # print("qhfc:", mem_qhfc)
-        # print("scale:", mem_scale)
-        # print("mn:", mem_mn)
-        #
-        # import pdb
-        # pdb.set_trace()
-
-        # if x.dtype == torch.float32:
-        #     return x_lfc.to(torch.bfloat16), q_input, q_scale.to(torch.bfloat16), q_min.to(torch.bfloat16) # Remove x_lfc.to(torch.bfloat16) if accuracy drops
-        # else:
-        #     return x_lfc, q_input, q_scale, q_min
-
-
+    # if x.dtype == torch.float32:
+    #     return x_lfc, q_input, q_scale.to(torch.bfloat16), q_min.to(
+    #         torch.bfloat16)  # Remove x_lfc.to(torch.bfloat16) if accuracy drops
+    # else:
+    #     return x_lfc, q_input, q_scale, q_min
 
     @staticmethod
     @torch.no_grad()
@@ -178,25 +147,23 @@ class FDMP_(Function):
             x, _, _, _, _ = feature_pack
             return x
 
-        x_lfc_float16, q_input, q_scale, q_min = feature_pack  
+        x_lfc, q_input, q_scale, q_min = feature_pack
+
+        # print(x_lfc.dtype, q_scale.dtype, q_min.dtype)
+        # Estimate valid group size
+        # if q_scale.dtype == torch.bfloat16:
+        #     q_scale = q_scale.to(torch.float32)
+        #     q_min = q_min.to(torch.float32)
 
         # Estimate valid group size
-        if not config.half_precision:
-            x_lfc = x_lfc_float16.to(torch.float32)  # Remove it if accuracy drops
-            q_scale = q_scale.to(torch.float32)
-            q_min = q_min.to(torch.float32)
-        else:
-            x_lfc = x_lfc_float16.to(torch.float16)  # Remove it if accuracy drops
-            q_scale = q_scale.to(torch.float16)
-            q_min = q_min.to(torch.float16)
-
+        featuremap_area = q_input_shape[-2:].numel()
+        group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
         q_bits = config.hfc_bit_num
-
-        x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min)
+        x_hfc_dequant = FDMP.dequantize_and_unpack(q_input, q_input_shape, q_bits, q_scale, q_min, group_size)
 
         # Remove padding
-        # num_features = q_input_shape[1:].numel()
-        # x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
+        num_features = q_input_shape[1:].numel()
+        x_hfc_dequant = x_hfc_dequant.view(q_input_shape[0], -1)[:, :num_features]
         x_hfc_dequant = x_hfc_dequant.view(*q_input_shape).contiguous()
 
         # pool_kernel_size = config.lfc_block if H >= config.lfc_block else H
@@ -204,54 +171,6 @@ class FDMP_(Function):
         x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
 
         return x_lfc_large + x_hfc_dequant
-
-  
-
-        # # mn, mx = ext_minimax.minimax(x_hfc_flatten)
-        # # q_min, mx = mn.view(Batch, Channel, 1), mx.view(Batch, Channel, 1)
-        #
-        # # q_min = x_hfc_channel.min(dim=-1).values # .unsqueeze(dim=-1)
-        # # mx = x_hfc_channel.max(dim=-1).values # .unsqueeze(dim=-1)
-        #
-        # q_min = x_hfc_channel.min(dim=-1).values.unsqueeze(dim=-1)
-        # mx = x_hfc_channel.max(dim=-1).values.unsqueeze(dim=-1)
-        #
-        # q_bits = config.hfc_bit_num
-        #
-        # # # # #
-        # q_input, q_scale = FDMP.quantize_and_pack(x_hfc_channel, q_bits, q_min, mx)
-        #
-        #
-        # featuremap_area = x_hfc.shape[-2:].numel()  # should be n
-        # # group_size = config.group_size if featuremap_area > config.group_size else featuremap_area
-        # # x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size)
-        #
-        # if featuremap_area > config.group_size:
-        #     group_size = config.group_size
-        #     x_hfc_groups, q_bits, q_min, mx = FDMP.no_scheme_compute_quantization_bits(x_hfc, group_size)
-        #
-        # else:
-        #     group_size = featuremap_area
-        #     x_hfc_groups = x_hfc.reshape(Batch, -1, group_size)
-        #     q_bits = config.hfc_bit_num
-        #     q_min = x_hfc_groups.min(dim=-1).values.unsqueeze(dim=-1)
-        #     mx = x_hfc_groups.max(dim=-1).values.unsqueeze(dim=-1)
-        #
-        #
-        # # import pdb
-        # # pdb.set_trace()
-        #
-        # # q_input, q_scale = 0, 0
-        #
-        # # if x.dtype == torch.float32:
-        # #     return x_lfc, q_input, q_bits, q_scale.to(torch.bfloat16), q_min.to(torch.bfloat16)
-        # # else:
-        # #     return x_lfc, q_input, q_bits, q_scale, q_min
-        #
-        # return x_lfc, q_input, q_scale, q_min
-
-
-
 
 
     # @staticmethod
@@ -288,7 +207,7 @@ class FDMP_(Function):
         Batch, Channel, Higth, Width = x.shape
 
         if Higth == 1:
-            return x, None, None, None
+            return x, None, None, None, None
 
         pool_kernel_size = config.lfc_block if Higth >= config.lfc_block else Higth
         x_lfc = F.avg_pool2d(x, pool_kernel_size, stride=pool_kernel_size, padding=0)
@@ -299,23 +218,8 @@ class FDMP_(Function):
         x_max_group = x_hfc.max(dim=2)[0].max(dim=2)[0].unsqueeze(dim=2).unsqueeze(dim=3)
         quant_step = (x_max_group - x_min_group) / (2 ** config.hfc_bit_num - 1) # + 1e-8
         x_reference = x_min_group  # + quant_step/2
-
-        if config.deter_round:
-            x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step)  # .type(torch.int)
-            x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
-        else:
-            x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step)  # .type(torch.int)
-            x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
-            storch_noise = torch.rand(x_hfc.shape, device=x_hfc.device)
-
-            # x_hfc_scale = (x_hfc - x_reference) / quant_step
-            # x_hfc_scale_floor = torch.floor(x_hfc_scale)
-            # delta = x_hfc_scale - torch.floor(x_hfc_scale)
-            # x_hfc_quant = x_hfc_scale_floor + (torch.rand(x_hfc.shape, device=x_hfc.device) < delta).type(torch.int)
-
-        # print(x_hfc_quant.shape)
-        # print(quant_step.shape)
-        # print(x_min_group.shape)
+        x_hfc_quant = torch.round((x_hfc - x_reference) / quant_step) # .type(torch.int)
+        x_hfc_quant = torch.clamp(x_hfc_quant, min=0, max=2 ** config.hfc_bit_num - 1).type(torch.int)
 
         return x_lfc, x_hfc_quant, x_min_group, quant_step
 
@@ -326,13 +230,9 @@ class FDMP_(Function):
         Batch, Channel, Higth, Width = q_input_shape
         if Higth == 1:
             x, _, _, _, _ = feature_pack
-            return x, None, None, None
+            return x, None, None, None, None
 
         x_lfc, x_hfc_quant, x_min_group, quant_step = feature_pack
-
-        # print(x_hfc_quant.shape)
-        # print(quant_step.shape)
-        # print(x_min_group.shape)
         x_hfc_dequant = x_hfc_quant.type(torch.float) * quant_step + x_min_group
 
         x_lfc_large = F.upsample_nearest(x_lfc, size=(Higth, Width), scale_factor=None)
@@ -573,21 +473,21 @@ class FDMP(Function):
 
     @staticmethod
     @torch.no_grad()
-    def quantize_and_pack(data, bits, mn, mx, N):
+    def quantize_and_pack(data, bits, mn, mx):
         if not config.half_precision:
-            return FDMP_.quantize_and_pack(data, bits, mn, mx, N)
+            return FDMP_.quantize_and_pack(data, bits, mn, mx)
         else:
             with autocast():
-                return FDMP_.quantize_and_pack(data, bits, mn, mx, N)
+                return FDMP_.quantize_and_pack(data, bits, mn, mx)
 
     @staticmethod
     @torch.no_grad()
-    def dequantize_and_unpack(data, shape, bits, scale, mn):
+    def dequantize_and_unpack(data, shape, bits, scale, mn, group_size):
         if not config.half_precision:
-            return FDMP_.dequantize_and_unpack(data, shape, bits, scale, mn)
+            return FDMP_.dequantize_and_unpack(data, shape, bits, scale, mn, group_size)
         else:
             with autocast():
-                return FDMP_.dequantize_and_unpack(data, shape, bits, scale, mn)
+                return FDMP_.dequantize_and_unpack(data, shape, bits, scale, mn, group_size)
 
     @staticmethod
     @torch.no_grad()

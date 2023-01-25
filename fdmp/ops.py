@@ -10,10 +10,15 @@ import time
 
 from utils import *
 
-from fdmp import FDMP, WDCT
+# from fdmp import FDMP
 from conf import config, QuantizationConfig
 # from torch.cuda.amp import autocast as autocast
 # from torch.cuda.amp import custom_fwd, custom_bwd
+
+if config.debug_speed:
+    from fdmpg import FDMP
+else:
+    from fdmp import FDMP
 
 conv2d_layer_ct = 0
 bn_layer_ct = 0
@@ -24,13 +29,17 @@ class fdmp_linear(Function):
     @staticmethod
     def forward(ctx, input, weight, bias=None):
 
-        feature_pack = FDMP.fdmp(1, input, WDCT.dct_1d, config.conv_window_size, weight.device)
-
+        # print(input.shape)
+        feature_pack = FDMP.fdmp1d(input)
         empty_cache(config.empty_cache_threshold)
 
         # ctx.scheme = scheme
         ctx.saved = feature_pack, weight, bias
         ctx.other_args = input.shape
+
+        # print(input.dtype, weight.dtype)
+
+        # print("Input Shape:", input.shape)
 
         return F.linear(input, weight, bias)
 
@@ -42,8 +51,12 @@ class fdmp_linear(Function):
         feature_pack, weight, bias = ctx.saved
         input_shape = ctx.other_args
 
-        input = FDMP.de_fdmp(1, feature_pack, WDCT.dct_1d, input_shape, config.conv_window_size, weight.device)
+        input = FDMP.de_fdmp1d(feature_pack, input_shape)
         del feature_pack, ctx.saved
+
+        # print("Re-input Shape:", input.shape)
+        # print("Weight Shape:", weight.shape)
+        # print("Bias Shape:", bias.shape)
 
         empty_cache(config.empty_cache_threshold)
 
@@ -53,9 +66,9 @@ class fdmp_linear(Function):
         # rank = len(grad_output.shape)
 
         grad_output_flatten = grad_output.view(-1, C_out)
-        input_flatten = input.view(-1, C_in)
+        input_flatten = input.reshape(-1, C_in)
         # print(grad_output_flatten.shape, weight.shape)
-        grad_input = grad_output_flatten.mm(weight)
+        grad_input = grad_output_flatten.mm(weight).reshape(input_shape)
         grad_weight = grad_output_flatten.t().mm(input_flatten)
 
         # grad_input = grad_output.mm(weight)
@@ -66,9 +79,13 @@ class fdmp_linear(Function):
         else:
             grad_bias = None
 
+        # print("Grad Input Shape:", grad_input.shape)
+        # print("Grad Weight Shape:", grad_weight.shape)
+        # print("Grad Bias Shape:", grad_bias.shape)
+
         # if ctx.scheme:
         #     ctx.scheme.if_allocate_perlayer()
-        return grad_input, grad_weight, grad_bias, None
+        return grad_input, grad_weight, grad_bias
 
 
 
@@ -79,13 +96,13 @@ class fdmp_convnd(Function):
         #     assert not ctx.needs_input_grad[0] and not ctx.needs_input_grad[1]
         #     return F.conv2d(input, weight, bias, stride, padding, dilation, groups)
 
-        # if config.simulate:
-        #     feature_pack = FDMP.fdmp_simulation(input)
-        # else:
-        #     feature_pack = FDMP.fdmp(input)
+        if config.simulate:
+            feature_pack = FDMP.fdmp_simulation(input)
+        else:
+            feature_pack = FDMP.fdmp(input)
 
-        feature_pack = FDMP.fdmp(input)
-
+        # feature_pack = FDMP.fdmp(input)
+        # print(input.shape)
 
         ## Save variable for backward
         # ctx.scheme = scheme
@@ -332,6 +349,9 @@ class fdmp_batch_norm3d(Function):
     def backward(ctx, grad_output):
         return fdmp_batch_norm_nd.run_backward(3, ctx, grad_output)
 
+
+
+####### Up to revise!
 
 class fdmp_conv_transposend(Function):
     @staticmethod

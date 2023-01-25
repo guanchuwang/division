@@ -99,12 +99,13 @@ parser.add_argument("--hfc_bit_num", type=int, default=2, help="")
 parser.add_argument("--rm_lfc", action="store_true")
 parser.add_argument("--rm_hfc", action="store_true")
 parser.add_argument("--debug_option", type=str, default="memory", choices=["memory", "speed"])
+parser.add_argument('--amp', dest='amp', action='store_true')
 parser.add_argument('--simulate', action='store_true', help='Simulate the quantization.')
 parser.add_argument("--group_size", type=int, default=1024, help="") # cannot larger than 1024
 parser.add_argument("--debug_fd_memory", action="store_true")
 parser.add_argument("--non_quant", action="store_true")
 parser.add_argument("--log_fname", type=str, default="memory_debug.json")
-parser.add_argument("--outputdir", type=str, default="./log")
+parser.add_argument("--outputdir", type=str, default="./debug")
 
 
 from conf import config, config_init
@@ -113,6 +114,8 @@ from utils import get_memory_usage, compute_tensor_bytes, exp_recorder
 args_global = parser.parse_args()
 
 config_init(args_global)
+config.debug_speed = (args_global.debug_option == "speed")
+
 
 from module import FDMP_Module
 from torch.cuda.amp import autocast as autocast
@@ -196,6 +199,8 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         print("=> creating model '{}'".format(args.arch))
         model = models.__dict__[args.arch](num_classes=config.num_classes)
+
+    ##########################
     model = FDMP_Module(model)
 
     if not torch.cuda.is_available():
@@ -485,8 +490,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-        if args.debug_option == "memory":
+        # import pdb
+        # pdb.set_trace()
 
+        if args.debug_option == "memory":
             output = model(images)
             loss = criterion(output, target)
 
@@ -511,35 +518,34 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             exp_recorder.dump(os.path.join(args.outputdir, args.log_fname)) # 'mem_results.json')
             exit(0)
 
-
-        with autocast():
-            output = model(images)
-            loss = criterion(output, target)
-
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
         # losses.update(loss.item(), images.size(0))
         # top1.update(acc1[0], images.size(0))
         # top5.update(acc5[0], images.size(0))
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        with torch.no_grad():
-            optimizer.step()
-
-        # measure elapsed time
-        bs = len(images)
-        batch_total_time = time.time() - end
-        train_ips = bs / batch_total_time
-        batch_time.update(batch_total_time)
-        ips.update(train_ips)
-        end = time.time()
-
         if i % args.print_freq == 0:
             progress.display(i)
 
         if args.debug_option == "speed":
+            config.half_precision = True
+            with autocast():
+                output = model(images)
+                loss = criterion(output, target)
+
+            optimizer.zero_grad()
+            loss.backward()
+            with torch.no_grad():
+                optimizer.step()
+
+            # measure elapsed time
+            bs = len(images)
+            batch_total_time = time.time() - end
+            train_ips = bs / batch_total_time
+            batch_time.update(batch_total_time)
+            ips.update(train_ips)
+            end = time.time()
+
             global train_step_ct, train_ips_list, train_max_batch
             train_ips_list.append(train_ips)
             train_max_batch = max(train_max_batch, bs)
