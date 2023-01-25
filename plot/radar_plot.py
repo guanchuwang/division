@@ -91,7 +91,7 @@ radar.ax.legend(["DIVISION", "ActNN", "Checkpoint"],
                 labelspacing=0.1, fontsize=25, loc=(1.2, 0.6), frameon=False)
 # plt.subplots_adjust(left=0.01, bottom=0.01, top=0.99, right=0.99, wspace=0.01) # (left=0.125, bottom=0.155, top=0.965, right=0.97, wspace=0.01)
 
-plt.savefig(r"../figure/radar.png", bbox_inches="tight", dpi=30)
+plt.savefig(r"../figure/radar.png", bbox_inches="tight", dpi=50)
 plt.show()
 
 
