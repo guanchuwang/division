@@ -15,7 +15,7 @@ This can significantly reduce the memory cost without negatively affecting the p
 ### DIVISION Framework
 The framework of DIVISION is shown in the following figure. After the feed-forward operation of each layer, DIVISION estimates the LFC and compresses the HFC into a low-precision copy such that the total memory cost is significantly decreased after the compression. Before the backward propagation of each layer, the low-precision HFC is decompressed and combined with LFC to reconstruct the activation map. 
 <div align=center>
-<img width="1000" height="160" src="https://anonymous.4open.science/r/division-5CC0/figure/FDMP_forward_backward.png">
+<img width="1000" height="160" src="https://anonymous.4open.science/r/division-0355/figure/FDMP_forward_backward.png">
 </div>
 
 ### Advantages of DIVISION
@@ -74,12 +74,12 @@ Check the model accuracy and training log files.
 
 |  Dataset   |  Architecture | Top-1 Validation Accuracy | Normal Training Accuracy | Log file | 
 | :---: | :---: | :---: | :---: | :---: |
-| CIFAR-10   | ResNet-18     | 94.7 | 94.9 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet18_cifar10_lb_8_hq_2_coslr_e_100_b_256.txt)          |   
-| CIFAR-10   | ResNet-164    | 94.5 | 94.9 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar10_division_coslr_e_100_b_256.txt)          | 
-| CIFAR-100  | DenseNet-121  | 79.5 | 79.8 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/densenet121_cifar100_lb_8_hq_2_coslr_e_120_b_256_lr01.txt) | 
-| CIFAR-100  | ResNet-164    | 76.9 | 77.3 | [LOG](https://anonymous.4open.science/r/division-5CC0/log/resnet164_cifar100_division_coslr_e_200_b_256_lr015.txt)   | 
-| ImageNet   | ResNet-50     | 75.9 | [76.2](https://paperswithcode.com/lib/torchvision/resnet) | [LOG](https://anonymous.4open.science/r/division-5CC0/log/log_resnet50_division_B_8_Q_2.txt)                         | 
-| ImageNet   | DenseNet-161  | 77.6 | [77.6](https://paperswithcode.com/lib/torchvision/densenet) | [LOG](https://anonymous.4open.science/r/division-5CC0/log/log_densenet161_division_B_8_Q_2.txt)                      | 
+| CIFAR-10   | ResNet-18     | 94.7 | 94.9 | [LOG](https://anonymous.4open.science/r/division-0355/log/resnet18_cifar10_lb_8_hq_2_coslr_e_100_b_256.txt)          |   
+| CIFAR-10   | ResNet-164    | 94.5 | 94.9 | [LOG](https://anonymous.4open.science/r/division-0355/log/resnet164_cifar10_division_coslr_e_100_b_256.txt)          | 
+| CIFAR-100  | DenseNet-121  | 79.5 | 79.8 | [LOG](https://anonymous.4open.science/r/division-0355/log/densenet121_cifar100_lb_8_hq_2_coslr_e_120_b_256_lr01.txt) | 
+| CIFAR-100  | ResNet-164    | 76.9 | 77.3 | [LOG](https://anonymous.4open.science/r/division-0355/log/resnet164_cifar100_division_coslr_e_200_b_256_lr015.txt)   | 
+| ImageNet   | ResNet-50     | 75.9 | [76.2](https://paperswithcode.com/lib/torchvision/resnet) | [LOG](https://anonymous.4open.science/r/division-0355/log/log_resnet50_division_B_8_Q_2.txt)                         | 
+| ImageNet   | DenseNet-161  | 77.6 | [77.6](https://paperswithcode.com/lib/torchvision/densenet) | [LOG](https://anonymous.4open.science/r/division-0355/log/log_densenet161_division_B_8_Q_2.txt)                      | 
 
 
 ## Reproduce our experiment results
@@ -88,27 +88,27 @@ Check the model accuracy and training log files.
 ### Model Accuracy
 
 <div align=center>
-<img width="250" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_blpa.png">
-<img width="350" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_acgc.png">
-<img width="420" height="200" src="https://anonymous.4open.science/r/division-5CC0/figure/acc_vs_actnn.png">
+<img width="250" height="200" src="https://anonymous.4open.science/r/division-0355/figure/acc_vs_blpa.png">
+<img width="350" height="200" src="https://anonymous.4open.science/r/division-0355/figure/acc_vs_acgc.png">
+<img width="420" height="200" src="https://anonymous.4open.science/r/division-0355/figure/acc_vs_actnn.png">
 </div>
 
 
 
 ### Training Memory Cost
 <div align=center>
-<img width="650" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/memory_cost_table.png">
+<img width="650" height="250" src="https://anonymous.4open.science/r/division-0355/figure/memory_cost_table.png">
 </div>
 
 ### Training Throughput
 <div align=center>
-<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/resnet50_throughput_imagenet.png">
-<img width="350" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/wrn50_2_throughput_imagenet.png">
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-0355/figure/resnet50_throughput_imagenet.png">
+<img width="350" height="250" src="https://anonymous.4open.science/r/division-0355/figure/wrn50_2_throughput_imagenet.png">
 </div>
 
 ### Overall Evaluation
 <div align=center>
-<img width="470" height="250" src="https://anonymous.4open.science/r/division-5CC0/figure/radar.png">
+<img width="470" height="250" src="https://anonymous.4open.science/r/division-0355/figure/radar.png">
 </div>
 
 ## Acknowledgment
