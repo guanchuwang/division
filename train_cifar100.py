@@ -390,7 +390,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         # output = model(images)
         # loss = criterion(output, target)
-        # hegsns
 
         # amp
         if not config.half_precision:
@@ -452,7 +451,6 @@ def validate(val_loader, model, criterion, args):
             # compute output
             output = model(images) # , window_size=args.window_size)
             loss = criterion(output, target)
-            # hegsns
 
             # measure accuracy and record loss
             acc1, acc5 = accuracy(output, target, topk=(1, 5))

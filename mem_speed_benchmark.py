@@ -346,7 +346,6 @@ def dataloader_init(args):
     #
     print("Load LMDB dataset.")
 
-    # hegsns
     traindir_lmdb = os.path.join(args.data, "train.lmdb")
     valdir_lmdb = os.path.join(args.data, "val.lmdb")
     train_data_num = 1279178 # len(datasets.ImageFolder('/home/gw22/data/ImageNet/train'))

@@ -25,7 +25,6 @@ class FDMP_Module(nn.Module):
         FDMP_Module.convert_layers(self.model)
         # FDMP_Module.restore_layers(self.model) # restore the last linear layer
         print(self.model)
-        # hegsns
 
     @staticmethod
     def convert_layers(module):
